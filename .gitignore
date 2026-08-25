@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .env
 data/processed/
+data/raw/network_log_SAFE.csv

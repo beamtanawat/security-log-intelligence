@@ -117,6 +117,20 @@ describes field meaning, separately from data quality.
 | `threat_id` | Source threat identifier when supplied; integer-like raw value. | 18 non-missing. | SOURCE_SPECIFIC / NEEDS VERIFICATION | Confirm relation to threat names and patterns. |
 | `threat_ref` | Source threat reference when supplied; categorical or opaque string. | 18 non-missing. | SOURCE_SPECIFIC / NEEDS VERIFICATION | Confirm reference semantics without external enrichment. |
 
+## Stage 1.2 Validated Clarifications
+
+The following measured clarifications supplement the cautious field entries above.
+They do not change source-field meanings or confidence levels.
+
+| Fields | Stage 1.2 evidence | Retained interpretation |
+| --- | --- | --- |
+| itime | 1 missing value; 99,999 valid integers with no conversion failures; range 1,729,294,669 to 1,729,338,553. A UTC rendering was derived under an epoch-seconds assumption. | The UTC value is `DERIVED`; the epoch-seconds interpretation remains `NEEDS VERIFICATION`. The missing-value cause is `UNKNOWN`. |
+| data_timestamp | 100,000 valid integers with no conversion failures; range 0 to 731; 237 unique values; repeated values and file-order decreases occur. | Source semantics remain `UNKNOWN`. Numeric comparison with `itime` does not establish a unit or meaning. |
+| src_port and dst_port | Both are missing on all 27,447 protocol-1/ICMP records and populated on all 66,357 TCP and 6,196 UDP records. | ICMP port missingness is `EXPECTED`; no blank source value was filled or normalized. |
+| Session metrics | The five metric fields are all missing together on 778 records; 99,222 records have all five populated; there are no partial patterns. | Missingness is `CONTEXT_DEPENDENT`, not automatically a data-quality failure. Units and lifecycle semantics remain source-specific. |
+| net_sessionid | 50,399 unique values; 46,018 values occur on multiple records. | Repetition identifies source-record grouping only and is not an exact-duplicate finding. Lifecycle meaning remains `NEEDS VERIFICATION`. |
+| Application and threat fields | `app_service` is present on all records; `app_id` and `app_name` occur on 129 records. Any threat field occurs on 25 records. | These are FortiGate source-product observations, not independent security labels or ground truth. |
+
 ## Inventory Completeness
 
 The checked-in inventory implementation defines the same 58 fields, in the

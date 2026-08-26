@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field as dataclass_field
+from math import ceil
 import re
+from statistics import median
 from typing import Any
 
 
@@ -612,6 +614,22 @@ MISSING_GROUP_VALUE = "<MISSING>"
 DERIVED_PROTOCOL_NAMES = {"1": "ICMP", "6": "TCP", "17": "UDP"}
 APPLICATION_FIELDS = ("app_cat", "app_name", "app_id")
 NUMERIC_SERVICE_PATTERN = re.compile(r"^(tcp|udp)/(\d+)$", re.IGNORECASE)
+SESSION_LIFECYCLE_FIELDS = ("event_type", "event_subtype", "event_action")
+SESSION_MISSING_CONTEXT_FIELDS = (
+    "event_type",
+    "event_subtype",
+    "event_action",
+    "net_proto",
+    "app_service",
+    "threat_presence",
+)
+SESSION_SIZE_BUCKETS = (
+    ("1", 1, 1),
+    ("2", 2, 2),
+    ("3-5", 3, 5),
+    ("6-10", 6, 10),
+    ("11+", 11, None),
+)
 
 
 def _unknown_definition(field: str) -> FieldDefinition:
@@ -719,6 +737,334 @@ def _numeric_service_hint(service: str | None) -> tuple[str, str] | None:
     return transport.lower(), port
 
 
+def _nearest_rank_percentile(
+    values: Sequence[int], percentile: int
+) -> int | None:
+    """Return a deterministic nearest-rank percentile for integer group sizes."""
+
+    if not values:
+        return None
+    if not 0 <= percentile <= 100:
+        raise ValueError("percentile must be between 0 and 100")
+
+    ordered_values = sorted(values)
+    if percentile == 0:
+        return ordered_values[0]
+    rank = ceil(percentile / 100 * len(ordered_values))
+    return ordered_values[rank - 1]
+
+
+def _session_size_bucket(size: int) -> str:
+    """Return one bounded distribution bucket for a records-per-session count."""
+
+    for label, minimum, maximum in SESSION_SIZE_BUCKETS:
+        if size >= minimum and (maximum is None or size <= maximum):
+            return label
+    raise ValueError("session size must be positive")
+
+
+@dataclass
+class _SessionStats:
+    """Aggregate state for one opaque session identifier.
+
+    It retains only counters, a first non-missing metric value, and a variation
+    flag. It does not retain raw records or deduplicate them.
+    """
+
+    record_count: int = 0
+    lifecycle_counts: dict[str, Counter[str]] = dataclass_field(
+        default_factory=lambda: {
+            field: Counter() for field in SESSION_LIFECYCLE_FIELDS
+        }
+    )
+    metric_counts: dict[str, Counter[str]] = dataclass_field(
+        default_factory=lambda: {field: Counter() for field in SESSION_METRIC_FIELDS}
+    )
+    first_non_missing_metric_values: dict[str, str] = dataclass_field(
+        default_factory=dict
+    )
+    varying_metric_fields: set[str] = dataclass_field(default_factory=set)
+    all_metrics_missing_record_count: int = 0
+
+
+class SessionBehaviorAccumulator:
+    """One-pass, aggregate session analysis for Stage 1.2D.
+
+    Raw ``net_sessionid`` values are grouping keys only. Repeated keys retain all
+    records and are never considered duplicate records by this accumulator.
+    """
+
+    def __init__(
+        self,
+        *,
+        lifecycle_value_limit: int = 20,
+        missing_context_value_limit: int = 20,
+    ) -> None:
+        if lifecycle_value_limit < 1 or missing_context_value_limit < 1:
+            raise ValueError("session summary limits must be at least 1")
+        self.lifecycle_value_limit = lifecycle_value_limit
+        self.missing_context_value_limit = missing_context_value_limit
+        self.row_count = 0
+        self.missing_session_identifier_record_count = 0
+        self._sessions: dict[str, _SessionStats] = {}
+        self._all_metrics_missing_context: dict[str, Counter[str]] = {
+            field: Counter() for field in SESSION_MISSING_CONTEXT_FIELDS
+        }
+        self._all_metrics_missing_event_type_action: Counter[tuple[str, str]] = Counter()
+
+    def add_row(self, row: Mapping[str, str | None]) -> None:
+        """Add one record without retaining the record or modifying any value."""
+
+        self.row_count += 1
+        raw_session_id = row.get("net_sessionid")
+        if is_missing(raw_session_id):
+            self.missing_session_identifier_record_count += 1
+        session_id = _group_value(raw_session_id)
+        stats = self._sessions.setdefault(session_id, _SessionStats())
+        stats.record_count += 1
+
+        for field in SESSION_LIFECYCLE_FIELDS:
+            stats.lifecycle_counts[field][_group_value(row.get(field))] += 1
+
+        missing_metric_fields = tuple(
+            field for field in SESSION_METRIC_FIELDS if is_missing(row.get(field))
+        )
+        for field in SESSION_METRIC_FIELDS:
+            raw_value = row.get(field)
+            metric_counts = stats.metric_counts[field]
+            if is_missing(raw_value):
+                metric_counts["missing_count"] += 1
+                continue
+
+            metric_counts["non_missing_count"] += 1
+            first_value = stats.first_non_missing_metric_values.setdefault(field, raw_value)
+            if raw_value != first_value:
+                stats.varying_metric_fields.add(field)
+
+        if missing_metric_fields == SESSION_METRIC_FIELDS:
+            stats.all_metrics_missing_record_count += 1
+            self._add_all_metrics_missing_context(row)
+
+    def _add_all_metrics_missing_context(self, row: Mapping[str, str | None]) -> None:
+        for field, counts in self._all_metrics_missing_context.items():
+            counts[_row_group_value(row, field)] += 1
+        self._all_metrics_missing_event_type_action[
+            (_group_value(row.get("event_type")), _group_value(row.get("event_action")))
+        ] += 1
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return bounded, JSON-ready session findings with explicit denominators."""
+
+        session_sizes = [stats.record_count for stats in self._sessions.values()]
+        repeated_sessions = [
+            stats for stats in self._sessions.values() if stats.record_count > 1
+        ]
+        single_record_session_count = len(session_sizes) - len(repeated_sessions)
+        repeated_record_count = sum(stats.record_count for stats in repeated_sessions)
+
+        return {
+            "interpretation": (
+                "Records are grouped by raw net_sessionid without deduplication; "
+                "a repeated session identifier is not an exact duplicate record."
+            ),
+            "record_count": self.row_count,
+            "unique_session_count": len(session_sizes),
+            "missing_session_identifier_record_count": self.missing_session_identifier_record_count,
+            "single_record_session_count": single_record_session_count,
+            "repeated_session_count": len(repeated_sessions),
+            "single_record_session_record_count": single_record_session_count,
+            "repeated_session_record_count": repeated_record_count,
+            "session_group_size_statistics": self._group_size_statistics(session_sizes),
+            "session_group_size_distribution": self._group_size_distribution(session_sizes),
+            "repeated_session_lifecycle": self._repeated_lifecycle_result(
+                repeated_sessions
+            ),
+            "repeated_session_metric_comparison": self._repeated_metric_result(
+                repeated_sessions, repeated_record_count
+            ),
+            "all_metrics_missing_context": self._all_metrics_missing_context_result(),
+        }
+
+    def _group_size_statistics(self, session_sizes: Sequence[int]) -> dict[str, Any]:
+        return {
+            "denominator_session_count": len(session_sizes),
+            "minimum_records_per_session": min(session_sizes) if session_sizes else None,
+            "maximum_records_per_session": max(session_sizes) if session_sizes else None,
+            "median_records_per_session": median(session_sizes) if session_sizes else None,
+            "nearest_rank_percentiles": {
+                "p50": _nearest_rank_percentile(session_sizes, 50),
+                "p75": _nearest_rank_percentile(session_sizes, 75),
+                "p90": _nearest_rank_percentile(session_sizes, 90),
+                "p95": _nearest_rank_percentile(session_sizes, 95),
+            },
+        }
+
+    def _group_size_distribution(
+        self, session_sizes: Sequence[int]
+    ) -> list[dict[str, Any]]:
+        bucket_counts = Counter(_session_size_bucket(size) for size in session_sizes)
+        return [
+            {
+                "records_per_session": label,
+                "session_count": bucket_counts[label],
+                "represented_record_count": sum(
+                    size for size in session_sizes if _session_size_bucket(size) == label
+                ),
+                "percentage_of_sessions": percentage(bucket_counts[label], len(session_sizes)),
+            }
+            for label, _, _ in SESSION_SIZE_BUCKETS
+            if bucket_counts[label]
+        ]
+
+    def _repeated_lifecycle_result(
+        self, repeated_sessions: Sequence[_SessionStats]
+    ) -> dict[str, Any]:
+        field_summaries: list[dict[str, Any]] = []
+        for field in SESSION_LIFECYCLE_FIELDS:
+            sessions_per_value: Counter[str] = Counter()
+            records_per_value: Counter[str] = Counter()
+            for stats in repeated_sessions:
+                for value, record_count in stats.lifecycle_counts[field].items():
+                    sessions_per_value[value] += 1
+                    records_per_value[value] += record_count
+
+            ordered_values = sorted(
+                sessions_per_value,
+                key=lambda value: (-sessions_per_value[value], value),
+            )
+            selected_values = ordered_values[: self.lifecycle_value_limit]
+            field_summaries.append(
+                {
+                    "field": field,
+                    "reported_value_count": len(selected_values),
+                    "omitted_value_count": len(ordered_values) - len(selected_values),
+                    "values": [
+                        {
+                            "value": value,
+                            "session_count": sessions_per_value[value],
+                            "record_count": records_per_value[value],
+                            "percentage_of_repeated_sessions": percentage(
+                                sessions_per_value[value], len(repeated_sessions)
+                            ),
+                        }
+                        for value in selected_values
+                    ],
+                }
+            )
+
+        multiple_actions = sum(
+            len(stats.lifecycle_counts["event_action"]) > 1
+            for stats in repeated_sessions
+        )
+        multiple_subtypes = sum(
+            len(stats.lifecycle_counts["event_subtype"]) > 1
+            for stats in repeated_sessions
+        )
+        return {
+            "denominator_repeated_session_count": len(repeated_sessions),
+            "sessions_with_multiple_event_actions_count": multiple_actions,
+            "sessions_with_multiple_event_subtypes_count": multiple_subtypes,
+            "field_value_presence": field_summaries,
+        }
+
+    def _repeated_metric_result(
+        self,
+        repeated_sessions: Sequence[_SessionStats],
+        repeated_record_count: int,
+    ) -> dict[str, Any]:
+        fields: dict[str, dict[str, Any]] = {}
+        for field in SESSION_METRIC_FIELDS:
+            missing_record_count = 0
+            non_missing_record_count = 0
+            all_missing_session_count = 0
+            all_populated_session_count = 0
+            mixed_population_session_count = 0
+            varying_value_session_count = 0
+            for stats in repeated_sessions:
+                counts = stats.metric_counts[field]
+                missing_count = counts["missing_count"]
+                non_missing_count = counts["non_missing_count"]
+                missing_record_count += missing_count
+                non_missing_record_count += non_missing_count
+                if non_missing_count == 0:
+                    all_missing_session_count += 1
+                elif missing_count == 0:
+                    all_populated_session_count += 1
+                else:
+                    mixed_population_session_count += 1
+                if field in stats.varying_metric_fields:
+                    varying_value_session_count += 1
+
+            fields[field] = {
+                "missing_record_count": missing_record_count,
+                "non_missing_record_count": non_missing_record_count,
+                "denominator_repeated_record_count": repeated_record_count,
+                "all_missing_session_count": all_missing_session_count,
+                "all_populated_session_count": all_populated_session_count,
+                "mixed_population_session_count": mixed_population_session_count,
+                "sessions_with_varying_non_missing_raw_values_count": varying_value_session_count,
+            }
+        return {
+            "denominator_repeated_session_count": len(repeated_sessions),
+            "denominator_repeated_record_count": repeated_record_count,
+            "fields": fields,
+        }
+
+    def _all_metrics_missing_context_result(self) -> dict[str, Any]:
+        all_missing_count = sum(self._all_metrics_missing_event_type_action.values())
+        context: list[dict[str, Any]] = []
+        for field, counts in self._all_metrics_missing_context.items():
+            ordered_values = sorted(counts, key=lambda value: (-counts[value], value))
+            selected_values = ordered_values[: self.missing_context_value_limit]
+            context.append(
+                {
+                    "field": field,
+                    "reported_value_count": len(selected_values),
+                    "omitted_value_count": len(ordered_values) - len(selected_values),
+                    "values": [
+                        {
+                            "value": value,
+                            "row_count": counts[value],
+                            "percentage_of_all_metrics_missing_rows": percentage(
+                                counts[value], all_missing_count
+                            ),
+                        }
+                        for value in selected_values
+                    ],
+                }
+            )
+
+        ordered_combinations = sorted(
+            self._all_metrics_missing_event_type_action,
+            key=lambda values: (-self._all_metrics_missing_event_type_action[values], values),
+        )
+        selected_combinations = ordered_combinations[: self.missing_context_value_limit]
+        return {
+            "all_metrics_missing_record_count": all_missing_count,
+            "denominator_row_count": self.row_count,
+            "data_quality_status": "UNKNOWN",
+            "context": context,
+            "event_type_action": [
+                {
+                    "event_type": event_type,
+                    "event_action": event_action,
+                    "row_count": self._all_metrics_missing_event_type_action[
+                        (event_type, event_action)
+                    ],
+                    "percentage_of_all_metrics_missing_rows": percentage(
+                        self._all_metrics_missing_event_type_action[
+                            (event_type, event_action)
+                        ],
+                        all_missing_count,
+                    ),
+                }
+                for event_type, event_action in selected_combinations
+            ],
+            "omitted_event_type_action_count": len(ordered_combinations)
+            - len(selected_combinations),
+        }
+
+
 class ContextualMissingnessAccumulator:
     """Bounded-memory counters for one pass over valid CSV records."""
 
@@ -761,6 +1107,7 @@ class ContextualMissingnessAccumulator:
         self._app_fields_by_protocol: dict[str, dict[str, Counter[str]]] = {}
         self._numeric_service_labels: dict[str, Counter[str]] = {}
         self._non_numeric_service_row_count = 0
+        self._session_behavior = SessionBehaviorAccumulator()
 
     def add_row(self, row: Mapping[str, str | None]) -> None:
         """Add one parsed CSV row without retaining the full record."""
@@ -772,6 +1119,7 @@ class ContextualMissingnessAccumulator:
         self._add_missing_itime_context(row)
         self._add_optional_population(row)
         self._add_application_relationships(row)
+        self._session_behavior.add_row(row)
 
     def _add_conditional_counts(self, row: Mapping[str, str | None]) -> None:
         for grouping in self.groupings:
@@ -901,6 +1249,7 @@ class ContextualMissingnessAccumulator:
             "service_protocol_port_summary": self._service_protocol_port_result(),
             "numeric_service_label_alignment": self._numeric_service_alignment_result(),
             "session_metric_missingness": self._session_metric_result(),
+            "session_behavior": self._session_behavior.as_dict(),
             "missing_itime_context": self._missing_itime_result(),
             "optional_field_population_by_event_type": self._optional_population_result(),
         }

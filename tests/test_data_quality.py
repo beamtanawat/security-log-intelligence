@@ -195,6 +195,152 @@ class FieldInventoryTests(unittest.TestCase):
         self.assertEqual(protocol_summary["fields"]["app_name"]["non_missing_count"], 1)
         self.assertEqual(protocol_summary["fields"]["app_id"]["missing_count"], 1)
 
+    def test_session_group_statistics_and_lifecycle_keep_all_records(self) -> None:
+        def session_row(
+            session_id: str, loguid: str, action: str, subtype: str, sent_bytes: str
+        ) -> dict[str, str]:
+            return {
+                "net_sessionid": session_id,
+                "loguid": loguid,
+                "event_type": "traffic",
+                "event_action": action,
+                "event_subtype": subtype,
+                "net_proto": "6",
+                "app_service": "HTTPS",
+                "net_rcvdpkts": "1",
+                "net_recvbytes": "10",
+                "net_sentbytes": sent_bytes,
+                "net_sentpkts": "1",
+                "net_sessionduration": "2",
+            }
+
+        rows = [
+            session_row("one", "log-1", "accept", "forward", "10"),
+            session_row("two", "log-2", "accept", "forward", "10"),
+            session_row("two", "log-3", "close", "local", "20"),
+            session_row("three", "log-4", "accept", "forward", "10"),
+            session_row("three", "log-5", "accept", "forward", "10"),
+            session_row("three", "log-6", "accept", "forward", "10"),
+            session_row("four", "log-7", "accept", "forward", "10"),
+            session_row("four", "log-8", "accept", "forward", "10"),
+            session_row("four", "log-9", "accept", "forward", "10"),
+            session_row("four", "log-10", "accept", "forward", "10"),
+        ]
+
+        session = analyze_rows(rows)["session_behavior"]
+        statistics = session["session_group_size_statistics"]
+        distribution = {
+            item["records_per_session"]: item["session_count"]
+            for item in session["session_group_size_distribution"]
+        }
+
+        self.assertEqual(session["record_count"], 10)
+        self.assertEqual(session["unique_session_count"], 4)
+        self.assertEqual(session["single_record_session_count"], 1)
+        self.assertEqual(session["repeated_session_count"], 3)
+        self.assertEqual(session["repeated_session_record_count"], 9)
+        self.assertEqual(statistics["minimum_records_per_session"], 1)
+        self.assertEqual(statistics["maximum_records_per_session"], 4)
+        self.assertEqual(statistics["median_records_per_session"], 2.5)
+        self.assertEqual(statistics["nearest_rank_percentiles"], {"p50": 2, "p75": 3, "p90": 4, "p95": 4})
+        self.assertEqual(distribution, {"1": 1, "2": 1, "3-5": 2})
+        lifecycle = session["repeated_session_lifecycle"]
+        self.assertEqual(lifecycle["sessions_with_multiple_event_actions_count"], 1)
+        self.assertEqual(lifecycle["sessions_with_multiple_event_subtypes_count"], 1)
+        metrics = session["repeated_session_metric_comparison"]["fields"]
+        self.assertEqual(
+            metrics["net_sentbytes"]["sessions_with_varying_non_missing_raw_values_count"],
+            1,
+        )
+
+    def test_repeated_session_ids_are_not_deduplicated_even_for_equal_rows(self) -> None:
+        duplicate_row = {
+            "net_sessionid": "same-session",
+            "loguid": "same-loguid",
+            "event_type": "traffic",
+            "event_action": "accept",
+            "event_subtype": "forward",
+            **{field: "1" for field in SESSION_METRIC_FIELDS},
+        }
+
+        session = analyze_rows([duplicate_row, duplicate_row])["session_behavior"]
+
+        self.assertEqual(session["record_count"], 2)
+        self.assertEqual(session["unique_session_count"], 1)
+        self.assertEqual(session["repeated_session_count"], 1)
+        self.assertEqual(session["session_group_size_statistics"]["maximum_records_per_session"], 2)
+        self.assertIn("without deduplication", session["interpretation"])
+
+    def test_all_metric_missing_context_is_separate_from_partial_missingness(self) -> None:
+        all_missing_metrics = {field: "" for field in SESSION_METRIC_FIELDS}
+        populated_metrics = {field: "1" for field in SESSION_METRIC_FIELDS}
+        partial_metrics = {field: "1" for field in SESSION_METRIC_FIELDS}
+        partial_metrics["net_sentpkts"] = ""
+        rows = [
+            {
+                "net_sessionid": "repeated",
+                "loguid": "log-1",
+                "event_type": "traffic",
+                "event_subtype": "ip-conn",
+                "event_action": "accept",
+                "net_proto": "6",
+                "app_service": "SMB",
+                "threat_action": "",
+                **all_missing_metrics,
+            },
+            {
+                "net_sessionid": "repeated",
+                "loguid": "log-2",
+                "event_type": "traffic",
+                "event_subtype": "ip-conn",
+                "event_action": "accept",
+                "net_proto": "6",
+                "app_service": "SMB",
+                **populated_metrics,
+            },
+            {
+                "net_sessionid": "single",
+                "loguid": "log-3",
+                "event_type": "utm",
+                "event_subtype": "anomaly",
+                "event_action": "clear_session",
+                "net_proto": "17",
+                "app_service": "DNS",
+                "threat_action": "blocked",
+                **all_missing_metrics,
+            },
+            {
+                "net_sessionid": "partial",
+                "loguid": "log-4",
+                "event_type": "traffic",
+                "event_subtype": "ip-conn",
+                "event_action": "accept",
+                **partial_metrics,
+            },
+        ]
+
+        result = analyze_rows(rows)
+        missingness = result["session_metric_missingness"]
+        context = result["session_behavior"]["all_metrics_missing_context"]
+        action_counts = {
+            (item["event_type"], item["event_action"]): item["row_count"]
+            for item in context["event_type_action"]
+        }
+        repeated_metrics = result["session_behavior"]["repeated_session_metric_comparison"]
+
+        self.assertEqual(missingness["all_metrics_missing_count"], 2)
+        self.assertEqual(missingness["partial_metric_missing_count"], 1)
+        self.assertEqual(context["all_metrics_missing_record_count"], 2)
+        self.assertEqual(context["data_quality_status"], "UNKNOWN")
+        self.assertEqual(
+            action_counts,
+            {("traffic", "accept"): 1, ("utm", "clear_session"): 1},
+        )
+        self.assertEqual(
+            repeated_metrics["fields"]["net_rcvdpkts"]["mixed_population_session_count"],
+            1,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

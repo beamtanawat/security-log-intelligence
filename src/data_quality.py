@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -568,6 +569,46 @@ FIELD_DEFINITIONS: dict[str, FieldDefinition] = {
 
 KNOWN_FORTIGATE_COLUMNS = tuple(FIELD_DEFINITIONS)
 
+SESSION_METRIC_FIELDS = (
+    "net_rcvdpkts",
+    "net_recvbytes",
+    "net_sentbytes",
+    "net_sentpkts",
+    "net_sessionduration",
+)
+
+CONDITIONAL_MISSING_FIELDS = (
+    "itime",
+    "src_port",
+    "dst_port",
+    *SESSION_METRIC_FIELDS,
+    "app_name",
+    "threat_action",
+    "src_natip",
+)
+
+CONDITIONAL_GROUPINGS = (
+    ("event_type",),
+    ("event_subtype",),
+    ("event_action",),
+    ("net_proto",),
+    ("app_service",),
+    ("threat_presence",),
+    ("event_type", "event_action"),
+)
+
+OPTIONAL_CONTEXT_FIELDS = ("threat_action", "app_name", "src_natip")
+THREAT_PRESENCE_FIELDS = (
+    "threat_action",
+    "threat_name",
+    "threat_severity",
+    "threat_type",
+    "threat_pattern",
+    "threat_id",
+    "threat_ref",
+)
+MISSING_GROUP_VALUE = "<MISSING>"
+
 
 def _unknown_definition(field: str) -> FieldDefinition:
     return _field(
@@ -612,3 +653,293 @@ def validate_inventory_complete(
         raise ValueError("inventory fields do not match the CSV header order")
     if len(set(reported)) != len(reported):
         raise ValueError("inventory contains duplicate fields")
+
+
+def is_missing(value: str | None) -> bool:
+    """Return True for a missing CSV value without changing the raw value."""
+
+    return value is None or not value.strip()
+
+
+def percentage(numerator: int, denominator: int) -> float:
+    """Return a deterministic percentage and handle an empty group safely."""
+
+    if denominator == 0:
+        return 0.0
+    return round(100 * numerator / denominator, 6)
+
+
+def _group_value(value: str | None) -> str:
+    return MISSING_GROUP_VALUE if is_missing(value) else value
+
+
+def _row_group_value(row: Mapping[str, str | None], field: str) -> str:
+    if field == "threat_presence":
+        return (
+            "present"
+            if any(not is_missing(row.get(threat_field)) for threat_field in THREAT_PRESENCE_FIELDS)
+            else "absent"
+        )
+    return _group_value(row.get(field))
+
+
+def _group_sort_key(values: tuple[str, ...]) -> tuple[tuple[int, int | str], ...]:
+    """Sort numeric-looking group values numerically and other values as text."""
+
+    parts: list[tuple[int, int | str]] = []
+    for value in values:
+        try:
+            parts.append((0, int(value)))
+        except ValueError:
+            parts.append((1, value))
+    return tuple(parts)
+
+
+class ContextualMissingnessAccumulator:
+    """Bounded-memory counters for one pass over valid CSV records."""
+
+    def __init__(
+        self,
+        *,
+        target_fields: Sequence[str] = CONDITIONAL_MISSING_FIELDS,
+        groupings: Sequence[Sequence[str]] = CONDITIONAL_GROUPINGS,
+    ) -> None:
+        self.target_fields = tuple(target_fields)
+        self.groupings = tuple(tuple(grouping) for grouping in groupings)
+        self.row_count = 0
+        self._conditional_counts: dict[
+            tuple[str, ...], dict[tuple[str, ...], dict[str, Any]]
+        ] = {grouping: {} for grouping in self.groupings}
+        self._port_counts: dict[str, Counter[str]] = {}
+        self._session_metric_patterns: Counter[tuple[str, ...]] = Counter()
+        self._missing_itime_count = 0
+        self._missing_itime_context: dict[str, Counter[str]] = {
+            field: Counter()
+            for field in (
+                "event_type",
+                "event_subtype",
+                "event_action",
+                "net_proto",
+                "app_service",
+                "data_sourcetype",
+            )
+        }
+        self._optional_population: dict[str, dict[str, Counter[str]]] = {}
+
+    def add_row(self, row: Mapping[str, str | None]) -> None:
+        """Add one parsed CSV row without retaining the full record."""
+
+        self.row_count += 1
+        self._add_conditional_counts(row)
+        self._add_port_counts(row)
+        self._add_session_metric_pattern(row)
+        self._add_missing_itime_context(row)
+        self._add_optional_population(row)
+
+    def _add_conditional_counts(self, row: Mapping[str, str | None]) -> None:
+        for grouping in self.groupings:
+            group_values = tuple(_row_group_value(row, field) for field in grouping)
+            grouping_counts = self._conditional_counts[grouping]
+            group_stats = grouping_counts.setdefault(
+                group_values,
+                {
+                    "row_count": 0,
+                    "fields": {
+                        field: {"missing_count": 0, "non_missing_count": 0}
+                        for field in self.target_fields
+                    },
+                },
+            )
+            group_stats["row_count"] += 1
+            for field in self.target_fields:
+                count_name = "missing_count" if is_missing(row.get(field)) else "non_missing_count"
+                group_stats["fields"][field][count_name] += 1
+
+    def _add_port_counts(self, row: Mapping[str, str | None]) -> None:
+        protocol = _group_value(row.get("net_proto"))
+        counts = self._port_counts.setdefault(protocol, Counter())
+        source_missing = is_missing(row.get("src_port"))
+        destination_missing = is_missing(row.get("dst_port"))
+        if source_missing and destination_missing:
+            population = "both_missing"
+        elif source_missing:
+            population = "source_only_missing"
+        elif destination_missing:
+            population = "destination_only_missing"
+        else:
+            population = "both_populated"
+        counts["row_count"] += 1
+        counts[population] += 1
+
+    def _add_session_metric_pattern(self, row: Mapping[str, str | None]) -> None:
+        missing_fields = tuple(
+            field for field in SESSION_METRIC_FIELDS if is_missing(row.get(field))
+        )
+        self._session_metric_patterns[missing_fields] += 1
+
+    def _add_missing_itime_context(self, row: Mapping[str, str | None]) -> None:
+        if not is_missing(row.get("itime")):
+            return
+        self._missing_itime_count += 1
+        for field, counter in self._missing_itime_context.items():
+            counter[_group_value(row.get(field))] += 1
+
+    def _add_optional_population(self, row: Mapping[str, str | None]) -> None:
+        event_type = _group_value(row.get("event_type"))
+        event_counts = self._optional_population.setdefault(
+            event_type,
+            {field: Counter() for field in OPTIONAL_CONTEXT_FIELDS},
+        )
+        for field in OPTIONAL_CONTEXT_FIELDS:
+            count_name = "missing_count" if is_missing(row.get(field)) else "non_missing_count"
+            event_counts[field][count_name] += 1
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-ready aggregate results with explicit denominators."""
+
+        return {
+            "row_count": self.row_count,
+            "conditional_missingness": self._conditional_missingness_result(),
+            "protocol_port_population": self._protocol_port_result(),
+            "session_metric_missingness": self._session_metric_result(),
+            "missing_itime_context": self._missing_itime_result(),
+            "optional_field_population_by_event_type": self._optional_population_result(),
+        }
+
+    def _conditional_missingness_result(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for grouping in self.groupings:
+            groups: list[dict[str, Any]] = []
+            for values, stats in sorted(
+                self._conditional_counts[grouping].items(),
+                key=lambda item: _group_sort_key(item[0]),
+            ):
+                row_count = stats["row_count"]
+                fields = {
+                    field: {
+                        "missing_count": counts["missing_count"],
+                        "non_missing_count": counts["non_missing_count"],
+                        "denominator_row_count": row_count,
+                        "missing_percentage_of_group": percentage(
+                            counts["missing_count"], row_count
+                        ),
+                    }
+                    for field, counts in stats["fields"].items()
+                }
+                groups.append(
+                    {
+                        "group": dict(zip(grouping, values, strict=True)),
+                        "row_count": row_count,
+                        "fields": fields,
+                    }
+                )
+            results.append({"group_fields": list(grouping), "groups": groups})
+        return results
+
+    def _protocol_port_result(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for protocol, counts in sorted(
+            self._port_counts.items(), key=lambda item: _group_sort_key((item[0],))
+        ):
+            row_count = counts["row_count"]
+            both_missing = counts["both_missing"]
+            if protocol == "1" and row_count and both_missing == row_count:
+                status = "EXPECTED"
+            elif protocol in {"1", "6", "17"}:
+                status = "CONTEXT_DEPENDENT"
+            else:
+                status = "UNKNOWN"
+            results.append(
+                {
+                    "net_proto_raw": protocol,
+                    "row_count": row_count,
+                    "both_missing_count": both_missing,
+                    "source_only_missing_count": counts["source_only_missing"],
+                    "destination_only_missing_count": counts["destination_only_missing"],
+                    "both_populated_count": counts["both_populated"],
+                    "both_missing_percentage": percentage(both_missing, row_count),
+                    "data_quality_status": status,
+                }
+            )
+        return results
+
+    def _session_metric_result(self) -> dict[str, Any]:
+        all_missing_pattern = tuple(SESSION_METRIC_FIELDS)
+        all_missing_count = self._session_metric_patterns[all_missing_pattern]
+        no_missing_count = self._session_metric_patterns[()]
+        partial_missing_count = self.row_count - all_missing_count - no_missing_count
+        if all_missing_count and not partial_missing_count:
+            status = "CONTEXT_DEPENDENT"
+        elif partial_missing_count:
+            status = "UNKNOWN"
+        else:
+            status = "UNKNOWN"
+        patterns = [
+            {
+                "missing_fields": list(missing_fields),
+                "row_count": count,
+                "percentage_of_rows": percentage(count, self.row_count),
+            }
+            for missing_fields, count in sorted(
+                self._session_metric_patterns.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ]
+        return {
+            "metric_fields": list(SESSION_METRIC_FIELDS),
+            "all_metrics_missing_count": all_missing_count,
+            "all_metrics_populated_count": no_missing_count,
+            "partial_metric_missing_count": partial_missing_count,
+            "denominator_row_count": self.row_count,
+            "data_quality_status": status,
+            "patterns": patterns,
+        }
+
+    def _missing_itime_result(self) -> dict[str, Any]:
+        context = {
+            field: [
+                {"value": value, "count": count}
+                for value, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+            ]
+            for field, counter in self._missing_itime_context.items()
+        }
+        return {
+            "missing_count": self._missing_itime_count,
+            "denominator_row_count": self.row_count,
+            "missing_percentage": percentage(self._missing_itime_count, self.row_count),
+            "data_quality_status": "UNKNOWN",
+            "context": context,
+        }
+
+    def _optional_population_result(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for event_type, field_counts in sorted(self._optional_population.items()):
+            row_count = sum(field_counts[OPTIONAL_CONTEXT_FIELDS[0]].values())
+            results.append(
+                {
+                    "event_type": event_type,
+                    "row_count": row_count,
+                    "fields": {
+                        field: {
+                            "missing_count": counts["missing_count"],
+                            "non_missing_count": counts["non_missing_count"],
+                            "denominator_row_count": row_count,
+                            "non_missing_percentage_of_group": percentage(
+                                counts["non_missing_count"], row_count
+                            ),
+                            "data_quality_status": "UNKNOWN",
+                        }
+                        for field, counts in field_counts.items()
+                    },
+                }
+            )
+        return results
+
+
+def analyze_rows(rows: Iterable[Mapping[str, str | None]]) -> dict[str, Any]:
+    """Analyze parsed records in one pass without retaining raw rows."""
+
+    accumulator = ContextualMissingnessAccumulator()
+    for row in rows:
+        accumulator.add_row(row)
+    return accumulator.as_dict()

@@ -20,6 +20,7 @@ from data_quality import (  # noqa: E402
     validate_inventory_complete,
 )
 from analyze_data_quality import DataQualityAnalysisError, validate_output_path  # noqa: E402
+from timestamp_analysis import TimestampAnalysisAccumulator  # noqa: E402
 
 
 class FieldInventoryTests(unittest.TestCase):
@@ -340,6 +341,113 @@ class FieldInventoryTests(unittest.TestCase):
             repeated_metrics["fields"]["net_rcvdpkts"]["mixed_population_session_count"],
             1,
         )
+
+    def test_timestamp_analysis_reports_numeric_order_and_derived_utc_separately(self) -> None:
+        rows = [
+            {"itime": "10", "data_timestamp": "0"},
+            {"itime": "20", "data_timestamp": "1"},
+            {"itime": "20", "data_timestamp": "1"},
+            {"itime": "5", "data_timestamp": "0"},
+            {
+                "itime": "",
+                "data_timestamp": "not-a-number",
+                "event_type": "traffic",
+                "event_subtype": "forward",
+                "event_action": "accept",
+                "net_proto": "6",
+                "app_service": "SMB",
+                "data_sourcetype": "FortiGate",
+            },
+            {"itime": "invalid", "data_timestamp": "2"},
+        ]
+        original_rows = [dict(row) for row in rows]
+
+        timestamp = analyze_rows(rows)["timestamp_analysis"]
+        itime = timestamp["itime"]
+        data_timestamp = timestamp["data_timestamp"]
+
+        self.assertEqual(rows, original_rows)
+        self.assertEqual(itime["missing_count"], 1)
+        self.assertEqual(itime["valid_integer_count"], 4)
+        self.assertEqual(itime["conversion_failure_count"], 1)
+        self.assertEqual(itime["minimum_numeric_value"], 5)
+        self.assertEqual(itime["maximum_numeric_value"], 20)
+        self.assertEqual(itime["observed_numeric_span"], 15)
+        self.assertEqual(itime["repeated_valid_integer_occurrence_count"], 1)
+        self.assertEqual(itime["file_order"]["adjacent_increase_count"], 1)
+        self.assertEqual(itime["file_order"]["adjacent_equal_count"], 1)
+        self.assertEqual(itime["file_order"]["adjacent_decrease_count"], 1)
+        self.assertEqual(itime["derived_utc_epoch_seconds"]["label"], "DERIVED")
+        self.assertEqual(itime["derived_utc_epoch_seconds"]["timezone"], "UTC")
+        self.assertEqual(
+            itime["derived_utc_epoch_seconds"]["interpretation_status"],
+            "NEEDS VERIFICATION",
+        )
+        self.assertTrue(
+            itime["derived_utc_epoch_seconds"]["derived_minimum_utc"].endswith("+00:00")
+        )
+
+        self.assertEqual(data_timestamp["valid_integer_count"], 5)
+        self.assertEqual(data_timestamp["conversion_failure_count"], 1)
+        self.assertEqual(data_timestamp["unique_valid_integer_count"], 3)
+        self.assertEqual(
+            data_timestamp["repeated_valid_integer_occurrence_count"], 2
+        )
+        self.assertEqual(data_timestamp["file_order"]["adjacent_decrease_count"], 1)
+        self.assertEqual(data_timestamp["semantic_status"], "UNKNOWN")
+        self.assertEqual(
+            data_timestamp["value_frequency_summary"]["top_values"][:2],
+            [
+                {
+                    "numeric_value": 0,
+                    "row_count": 2,
+                    "percentage_of_valid_integer_rows": 40.0,
+                },
+                {
+                    "numeric_value": 1,
+                    "row_count": 2,
+                    "percentage_of_valid_integer_rows": 40.0,
+                },
+            ],
+        )
+
+        context = {summary["field"]: summary for summary in itime["missing_context"]}
+        self.assertEqual(context["event_type"]["values"], [{"value": "traffic", "row_count": 1}])
+        relationship = timestamp["itime_data_timestamp_relationship"]
+        self.assertEqual(relationship["both_valid_row_count"], 4)
+        self.assertEqual(relationship["itime_minus_data_timestamp_minimum"], 5)
+        self.assertEqual(relationship["itime_minus_data_timestamp_maximum"], 19)
+        self.assertFalse(relationship["constant_difference_observed"])
+        self.assertEqual(relationship["semantic_status"], "UNKNOWN")
+
+    def test_timestamp_relationship_can_report_a_constant_numeric_difference(self) -> None:
+        accumulator = TimestampAnalysisAccumulator(value_frequency_limit=2)
+        accumulator.add_row({"itime": "100", "data_timestamp": "1"})
+        accumulator.add_row({"itime": "101", "data_timestamp": "2"})
+        accumulator.add_row({"itime": "102", "data_timestamp": "3"})
+
+        relationship = accumulator.as_dict()["itime_data_timestamp_relationship"]
+
+        self.assertEqual(relationship["both_valid_row_count"], 3)
+        self.assertEqual(relationship["itime_minus_data_timestamp_minimum"], 99)
+        self.assertEqual(relationship["itime_minus_data_timestamp_maximum"], 99)
+        self.assertTrue(relationship["constant_difference_observed"])
+        self.assertEqual(relationship["semantic_status"], "UNKNOWN")
+
+    def test_timestamp_frequency_summary_is_bounded_and_stably_sorted(self) -> None:
+        accumulator = TimestampAnalysisAccumulator(value_frequency_limit=2)
+        for data_timestamp in ("2", "1", "3", "4"):
+            accumulator.add_row({"itime": "100", "data_timestamp": data_timestamp})
+
+        data_timestamp = accumulator.as_dict()["data_timestamp"]
+        frequency = data_timestamp["value_frequency_summary"]
+
+        self.assertEqual(frequency["reported_value_count"], 2)
+        self.assertEqual(frequency["omitted_value_count"], 2)
+        self.assertEqual(
+            [item["numeric_value"] for item in frequency["top_values"]], [1, 2]
+        )
+        self.assertEqual(data_timestamp["semantic_status"], "UNKNOWN")
 
 
 if __name__ == "__main__":

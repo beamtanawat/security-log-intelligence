@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ from data_quality import (  # noqa: E402
     validate_inventory_complete,
 )
 from analyze_data_quality import DataQualityAnalysisError, validate_output_path  # noqa: E402
+from semantic_analysis import SemanticAnalysisAccumulator  # noqa: E402
 from timestamp_analysis import TimestampAnalysisAccumulator  # noqa: E402
 
 
@@ -448,6 +450,190 @@ class FieldInventoryTests(unittest.TestCase):
             [item["numeric_value"] for item in frequency["top_values"]], [1, 2]
         )
         self.assertEqual(data_timestamp["semantic_status"], "UNKNOWN")
+
+    def test_event_semantics_accept_unknown_categories_with_bounded_stable_output(self) -> None:
+        accumulator = SemanticAnalysisAccumulator(
+            top_value_limit=2, combination_limit=1, rare_combination_limit=1
+        )
+        accumulator.add_row(
+            {
+                "event_type": "beta",
+                "event_subtype": "custom",
+                "event_action": "observe",
+                "event_severity": "notice",
+            }
+        )
+        accumulator.add_row(
+            {
+                "event_type": "alpha",
+                "event_subtype": "custom",
+                "event_action": "observe",
+                "event_severity": "notice",
+            }
+        )
+        accumulator.add_row(
+            {
+                "event_type": "gamma",
+                "event_subtype": "other",
+                "event_action": "record",
+                "event_severity": "information",
+            }
+        )
+
+        event = accumulator.as_dict()["event_semantics"]
+        application_context = accumulator.as_dict()["application_semantics"][
+            "population_by_event_type_action"
+        ]
+        event_types = event["field_frequencies"]["event_type"]
+        type_action = next(
+            summary
+            for summary in event["combinations"]
+            if summary["fields"] == ["event_type", "event_action"]
+        )
+
+        self.assertEqual(
+            [item["value"] for item in event_types["top_values"]], ["alpha", "beta"]
+        )
+        self.assertEqual(event_types["omitted_value_count"], 1)
+        self.assertEqual(type_action["common_combinations"][0]["row_count"], 1)
+        self.assertEqual(type_action["omitted_common_combination_count"], 2)
+        self.assertEqual(application_context["reported_context_count"], 1)
+        self.assertEqual(application_context["omitted_context_count"], 2)
+
+    def test_application_and_threat_semantics_are_contextual_not_security_labels(self) -> None:
+        rows = [
+            {
+                "event_type": "traffic",
+                "event_action": "accept",
+                "event_subtype": "forward",
+                "event_severity": "information",
+                "app_cat": "unscanned",
+                "app_service": "HTTPS",
+                "app_id": "",
+                "app_name": "",
+                "net_proto": "6",
+            },
+            {
+                "event_type": "utm",
+                "event_action": "blocked",
+                "event_subtype": "anomaly",
+                "event_severity": "warning",
+                "app_cat": "Network.Service",
+                "app_service": "PING",
+                "app_id": "42",
+                "app_name": "ICMP utility",
+                "net_proto": "1",
+                "threat_action": "blocked",
+                "threat_name": "icmp_sweep",
+                "threat_severity": "medium",
+                "threat_type": "Reconnaissance",
+            },
+            {
+                "event_type": "utm",
+                "event_action": "pass",
+                "event_subtype": "anomaly",
+                "event_severity": "warning",
+                "app_cat": "",
+                "app_service": "PING",
+                "app_id": "",
+                "app_name": "",
+                "net_proto": "1",
+                "threat_name": "Policy Violation",
+            },
+        ]
+
+        semantic = analyze_rows(rows)["semantic_analysis"]
+        application = semantic["application_semantics"]
+        threat = semantic["threat_semantics"]
+        utm_blocked = next(
+            context
+            for context in application["population_by_event_type_action"]["contexts"]
+            if context["event_type"] == "utm" and context["event_action"] == "blocked"
+        )
+
+        self.assertEqual(application["field_population"]["app_name"]["non_missing_count"], 1)
+        self.assertEqual(utm_blocked["fields"]["app_id"]["non_missing_count"], 1)
+        self.assertEqual(threat["threat_present_record_count"], 2)
+        self.assertEqual(
+            threat["field_completeness_when_threat_present"]["threat_action"][
+                "non_missing_count"
+            ],
+            1,
+        )
+        self.assertIn("source-product observations", threat["interpretation"])
+        rendered = json.dumps(semantic).lower()
+        for prohibited_name in ("is_attack", "is_malicious", "risk_score", "mitre"):
+            self.assertNotIn(prohibited_name, rendered)
+
+    def test_identifier_cardinality_hides_opaque_values_and_numeric_stats_are_descriptive(self) -> None:
+        rows = [
+            {
+                "src_ip": "SRCIP_one",
+                "dst_ip": "DSTIP_one",
+                "host_ip": "HOSTIP_one",
+                "loguid": "LOG_one",
+                "net_sessionid": "SESSION_one",
+                "src_port": "0",
+                "dst_port": "443",
+                "net_rcvdpkts": "0",
+                "net_recvbytes": "1",
+                "net_sentbytes": "2",
+                "net_sentpkts": "3",
+                "net_sessionduration": "4",
+            },
+            {
+                "src_ip": "SRCIP_one",
+                "dst_ip": "DSTIP_two",
+                "host_ip": "HOSTIP_one",
+                "loguid": "LOG_two",
+                "net_sessionid": "SESSION_one",
+                "src_port": "5",
+                "dst_port": "",
+                "net_rcvdpkts": "100",
+                "net_recvbytes": "0",
+                "net_sentbytes": "0",
+                "net_sentpkts": "0",
+                "net_sessionduration": "0",
+            },
+        ]
+
+        semantic = analyze_rows(rows)["semantic_analysis"]
+        source_identifier = semantic["identifier_cardinality"]["src_ip"]
+        received_packets = semantic["selected_numeric_fields"]["net_rcvdpkts"]
+
+        self.assertEqual(source_identifier["unique_value_count"], 1)
+        self.assertEqual(source_identifier["repeated_occurrence_count"], 1)
+        self.assertFalse(source_identifier["identifier_values_reported"])
+        self.assertEqual(
+            source_identifier["occurrence_distribution"],
+            [
+                {
+                    "occurrences_per_identifier": "2",
+                    "identifier_count": 1,
+                    "percentage_of_unique_identifiers": 100.0,
+                }
+            ],
+        )
+        self.assertEqual(received_packets["zero_count"], 1)
+        self.assertEqual(received_packets["nonzero_count"], 1)
+        self.assertEqual(received_packets["median"], 50.0)
+        self.assertEqual(received_packets["nearest_rank_percentiles"]["p95"], 100)
+        self.assertNotIn("values", received_packets)
+
+    def test_semantic_analysis_handles_empty_optional_groups(self) -> None:
+        semantic = SemanticAnalysisAccumulator().as_dict()
+
+        self.assertEqual(semantic["row_count"], 0)
+        self.assertEqual(semantic["threat_semantics"]["threat_present_record_count"], 0)
+        self.assertEqual(
+            semantic["application_semantics"]["field_population"]["app_service"][
+                "non_missing_percentage_of_denominator"
+            ],
+            0.0,
+        )
+        self.assertEqual(
+            semantic["selected_numeric_fields"]["net_sentbytes"]["median"], None
+        )
 
 
 if __name__ == "__main__":

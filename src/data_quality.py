@@ -10,6 +10,7 @@ import re
 from statistics import median
 from typing import Any
 
+from semantic_analysis import SemanticAnalysisAccumulator
 from timestamp_analysis import TimestampAnalysisAccumulator
 
 
@@ -1111,6 +1112,7 @@ class ContextualMissingnessAccumulator:
         self._non_numeric_service_row_count = 0
         self._session_behavior = SessionBehaviorAccumulator()
         self._timestamp_analysis = TimestampAnalysisAccumulator()
+        self._semantic_analysis = SemanticAnalysisAccumulator()
 
     def add_row(self, row: Mapping[str, str | None]) -> None:
         """Add one parsed CSV row without retaining the full record."""
@@ -1124,6 +1126,7 @@ class ContextualMissingnessAccumulator:
         self._add_application_relationships(row)
         self._session_behavior.add_row(row)
         self._timestamp_analysis.add_row(row)
+        self._semantic_analysis.add_row(row)
 
     def _add_conditional_counts(self, row: Mapping[str, str | None]) -> None:
         for grouping in self.groupings:
@@ -1255,6 +1258,7 @@ class ContextualMissingnessAccumulator:
             "session_metric_missingness": self._session_metric_result(),
             "session_behavior": self._session_behavior.as_dict(),
             "timestamp_analysis": self._timestamp_analysis.as_dict(),
+            "semantic_analysis": self._semantic_analysis.as_dict(),
             "missing_itime_context": self._missing_itime_result(),
             "optional_field_population_by_event_type": self._optional_population_result(),
         }

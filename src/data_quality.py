@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+import re
 from typing import Any
 
 
@@ -608,6 +609,9 @@ THREAT_PRESENCE_FIELDS = (
     "threat_ref",
 )
 MISSING_GROUP_VALUE = "<MISSING>"
+DERIVED_PROTOCOL_NAMES = {"1": "ICMP", "6": "TCP", "17": "UDP"}
+APPLICATION_FIELDS = ("app_cat", "app_name", "app_id")
+NUMERIC_SERVICE_PATTERN = re.compile(r"^(tcp|udp)/(\d+)$", re.IGNORECASE)
 
 
 def _unknown_definition(field: str) -> FieldDefinition:
@@ -695,6 +699,26 @@ def _group_sort_key(values: tuple[str, ...]) -> tuple[tuple[int, int | str], ...
     return tuple(parts)
 
 
+def derived_protocol_name(protocol: str | None) -> str | None:
+    """Return a clearly derived standard name while preserving the raw number."""
+
+    if is_missing(protocol):
+        return None
+    return DERIVED_PROTOCOL_NAMES.get(protocol)
+
+
+def _numeric_service_hint(service: str | None) -> tuple[str, str] | None:
+    """Return a derived transport/port hint only for labels such as tcp/8080."""
+
+    if is_missing(service):
+        return None
+    match = NUMERIC_SERVICE_PATTERN.fullmatch(service)
+    if match is None:
+        return None
+    transport, port = match.groups()
+    return transport.lower(), port
+
+
 class ContextualMissingnessAccumulator:
     """Bounded-memory counters for one pass over valid CSV records."""
 
@@ -703,9 +727,17 @@ class ContextualMissingnessAccumulator:
         *,
         target_fields: Sequence[str] = CONDITIONAL_MISSING_FIELDS,
         groupings: Sequence[Sequence[str]] = CONDITIONAL_GROUPINGS,
+        service_group_limit: int = 20,
+        services_per_group: int = 10,
+        numeric_service_label_limit: int = 20,
     ) -> None:
+        if service_group_limit < 1 or services_per_group < 1 or numeric_service_label_limit < 1:
+            raise ValueError("service-summary limits must be at least 1")
         self.target_fields = tuple(target_fields)
         self.groupings = tuple(tuple(grouping) for grouping in groupings)
+        self.service_group_limit = service_group_limit
+        self.services_per_group = services_per_group
+        self.numeric_service_label_limit = numeric_service_label_limit
         self.row_count = 0
         self._conditional_counts: dict[
             tuple[str, ...], dict[tuple[str, ...], dict[str, Any]]
@@ -725,6 +757,10 @@ class ContextualMissingnessAccumulator:
             )
         }
         self._optional_population: dict[str, dict[str, Counter[str]]] = {}
+        self._services_by_protocol_port: dict[tuple[str, str], dict[str, Any]] = {}
+        self._app_fields_by_protocol: dict[str, dict[str, Counter[str]]] = {}
+        self._numeric_service_labels: dict[str, Counter[str]] = {}
+        self._non_numeric_service_row_count = 0
 
     def add_row(self, row: Mapping[str, str | None]) -> None:
         """Add one parsed CSV row without retaining the full record."""
@@ -735,6 +771,7 @@ class ContextualMissingnessAccumulator:
         self._add_session_metric_pattern(row)
         self._add_missing_itime_context(row)
         self._add_optional_population(row)
+        self._add_application_relationships(row)
 
     def _add_conditional_counts(self, row: Mapping[str, str | None]) -> None:
         for grouping in self.groupings:
@@ -794,6 +831,65 @@ class ContextualMissingnessAccumulator:
             count_name = "missing_count" if is_missing(row.get(field)) else "non_missing_count"
             event_counts[field][count_name] += 1
 
+    def _add_application_relationships(self, row: Mapping[str, str | None]) -> None:
+        protocol = _group_value(row.get("net_proto"))
+        destination_port = _group_value(row.get("dst_port"))
+        service = row.get("app_service")
+
+        if not is_missing(service):
+            group_stats = self._services_by_protocol_port.setdefault(
+                (protocol, destination_port),
+                {"row_count": 0, "services": Counter()},
+            )
+            group_stats["row_count"] += 1
+            group_stats["services"][service] += 1
+
+            hint = _numeric_service_hint(service)
+            if hint is None:
+                self._non_numeric_service_row_count += 1
+            else:
+                self._add_numeric_service_alignment(
+                    service, hint, protocol, row.get("dst_port")
+                )
+
+        protocol_app_counts = self._app_fields_by_protocol.setdefault(
+            protocol,
+            {field: Counter() for field in APPLICATION_FIELDS},
+        )
+        for field in APPLICATION_FIELDS:
+            count_name = "missing_count" if is_missing(row.get(field)) else "non_missing_count"
+            protocol_app_counts[field][count_name] += 1
+
+    def _add_numeric_service_alignment(
+        self,
+        service: str,
+        hint: tuple[str, str],
+        protocol: str,
+        destination_port: str | None,
+    ) -> None:
+        transport, expected_port = hint
+        expected_protocol = "6" if transport == "tcp" else "17"
+        counts = self._numeric_service_labels.setdefault(service, Counter())
+        counts["row_count"] += 1
+
+        protocol_matches = protocol == expected_protocol
+        port_matches = (
+            not is_missing(destination_port)
+            and destination_port.isdigit()
+            and int(destination_port) == int(expected_port)
+        )
+        if protocol_matches and port_matches:
+            alignment = "matches_protocol_and_destination_port"
+        elif is_missing(destination_port):
+            alignment = "destination_port_missing"
+        elif protocol_matches:
+            alignment = "destination_port_mismatch"
+        elif port_matches:
+            alignment = "protocol_mismatch"
+        else:
+            alignment = "protocol_and_destination_port_mismatch"
+        counts[alignment] += 1
+
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-ready aggregate results with explicit denominators."""
 
@@ -801,6 +897,9 @@ class ContextualMissingnessAccumulator:
             "row_count": self.row_count,
             "conditional_missingness": self._conditional_missingness_result(),
             "protocol_port_population": self._protocol_port_result(),
+            "application_field_population_by_protocol": self._app_field_population_result(),
+            "service_protocol_port_summary": self._service_protocol_port_result(),
+            "numeric_service_label_alignment": self._numeric_service_alignment_result(),
             "session_metric_missingness": self._session_metric_result(),
             "missing_itime_context": self._missing_itime_result(),
             "optional_field_population_by_event_type": self._optional_population_result(),
@@ -852,6 +951,7 @@ class ContextualMissingnessAccumulator:
             results.append(
                 {
                     "net_proto_raw": protocol,
+                    "derived_protocol_name": derived_protocol_name(protocol),
                     "row_count": row_count,
                     "both_missing_count": both_missing,
                     "source_only_missing_count": counts["source_only_missing"],
@@ -862,6 +962,118 @@ class ContextualMissingnessAccumulator:
                 }
             )
         return results
+
+    def _app_field_population_result(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for protocol, field_counts in sorted(
+            self._app_fields_by_protocol.items(),
+            key=lambda item: _group_sort_key((item[0],)),
+        ):
+            row_count = sum(field_counts[APPLICATION_FIELDS[0]].values())
+            results.append(
+                {
+                    "net_proto_raw": protocol,
+                    "derived_protocol_name": derived_protocol_name(protocol),
+                    "row_count": row_count,
+                    "fields": {
+                        field: {
+                            "missing_count": counts["missing_count"],
+                            "non_missing_count": counts["non_missing_count"],
+                            "denominator_row_count": row_count,
+                            "non_missing_percentage_of_group": percentage(
+                                counts["non_missing_count"], row_count
+                            ),
+                        }
+                        for field, counts in field_counts.items()
+                    },
+                }
+            )
+        return results
+
+    def _service_protocol_port_result(self) -> dict[str, Any]:
+        ordered_groups = sorted(
+            self._services_by_protocol_port.items(),
+            key=lambda item: (-item[1]["row_count"], _group_sort_key(item[0])),
+        )
+        selected_groups = ordered_groups[: self.service_group_limit]
+        groups: list[dict[str, Any]] = []
+        for (protocol, destination_port), stats in selected_groups:
+            services = [
+                {
+                    "app_service": service,
+                    "row_count": count,
+                    "percentage_of_protocol_port_group": percentage(
+                        count, stats["row_count"]
+                    ),
+                }
+                for service, count in sorted(
+                    stats["services"].items(), key=lambda item: (-item[1], item[0])
+                )[: self.services_per_group]
+            ]
+            groups.append(
+                {
+                    "net_proto_raw": protocol,
+                    "derived_protocol_name": derived_protocol_name(protocol),
+                    "dst_port_raw": destination_port,
+                    "row_count": stats["row_count"],
+                    "top_services": services,
+                }
+            )
+        return {
+            "service_group_limit": self.service_group_limit,
+            "services_per_group": self.services_per_group,
+            "reported_group_count": len(groups),
+            "omitted_group_count": len(ordered_groups) - len(groups),
+            "groups": groups,
+        }
+
+    def _numeric_service_alignment_result(self) -> dict[str, Any]:
+        ordered_labels = sorted(
+            self._numeric_service_labels.items(),
+            key=lambda item: (-item[1]["row_count"], item[0]),
+        )
+        selected_labels = ordered_labels[: self.numeric_service_label_limit]
+        labels: list[dict[str, Any]] = []
+        for service, counts in selected_labels:
+            transport, expected_port = _numeric_service_hint(service) or ("", "")
+            expected_protocol = "6" if transport == "tcp" else "17"
+            labels.append(
+                {
+                    "app_service": service,
+                    "derived_transport": transport.upper(),
+                    "derived_protocol_raw": expected_protocol,
+                    "derived_protocol_name": derived_protocol_name(expected_protocol),
+                    "derived_destination_port": expected_port,
+                    "row_count": counts["row_count"],
+                    "matches_protocol_and_destination_port_count": counts[
+                        "matches_protocol_and_destination_port"
+                    ],
+                    "protocol_mismatch_count": counts["protocol_mismatch"],
+                    "destination_port_mismatch_count": counts[
+                        "destination_port_mismatch"
+                    ],
+                    "protocol_and_destination_port_mismatch_count": counts[
+                        "protocol_and_destination_port_mismatch"
+                    ],
+                    "destination_port_missing_count": counts[
+                        "destination_port_missing"
+                    ],
+                    "data_quality_status": (
+                        "CONTEXT_DEPENDENT"
+                        if counts["matches_protocol_and_destination_port"]
+                        == counts["row_count"]
+                        else "UNKNOWN"
+                    ),
+                }
+            )
+        return {
+            "interpretation": "Protocol and port hints are derived only from numeric service labels such as tcp/8080.",
+            "numeric_service_label_limit": self.numeric_service_label_limit,
+            "reported_label_count": len(labels),
+            "omitted_label_count": len(ordered_labels) - len(labels),
+            "non_numeric_service_row_count": self._non_numeric_service_row_count,
+            "labels": labels,
+        }
 
     def _session_metric_result(self) -> dict[str, Any]:
         all_missing_pattern = tuple(SESSION_METRIC_FIELDS)

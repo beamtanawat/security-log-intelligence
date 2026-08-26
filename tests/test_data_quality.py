@@ -15,6 +15,7 @@ from data_quality import (  # noqa: E402
     SESSION_METRIC_FIELDS,
     analyze_rows,
     build_field_inventory,
+    derived_protocol_name,
     percentage,
     validate_inventory_complete,
 )
@@ -136,6 +137,63 @@ class FieldInventoryTests(unittest.TestCase):
         unsafe_path = PROJECT_ROOT / "data" / "raw" / "stage_1_2.json"
         with self.assertRaisesRegex(DataQualityAnalysisError, "never"):
             validate_output_path(unsafe_path)
+
+    def test_protocol_port_edge_cases_preserve_raw_protocols_and_derived_names(self) -> None:
+        result = analyze_rows(
+            [
+                {"net_proto": "1", "src_port": "", "dst_port": ""},
+                {"net_proto": "1", "src_port": "123", "dst_port": "456"},
+                {"net_proto": "6", "src_port": "", "dst_port": "443"},
+                {"net_proto": "17", "src_port": "50000", "dst_port": ""},
+                {"net_proto": "99", "src_port": "", "dst_port": ""},
+            ]
+        )
+
+        by_protocol = {
+            row["net_proto_raw"]: row for row in result["protocol_port_population"]
+        }
+        self.assertEqual(by_protocol["1"]["both_missing_count"], 1)
+        self.assertEqual(by_protocol["1"]["both_populated_count"], 1)
+        self.assertEqual(by_protocol["1"]["derived_protocol_name"], "ICMP")
+        self.assertEqual(by_protocol["6"]["source_only_missing_count"], 1)
+        self.assertEqual(by_protocol["17"]["destination_only_missing_count"], 1)
+        self.assertIsNone(by_protocol["99"]["derived_protocol_name"])
+        self.assertIsNone(derived_protocol_name("99"))
+
+    def test_numeric_service_labels_report_alignment_without_security_labels(self) -> None:
+        result = analyze_rows(
+            [
+                {"net_proto": "6", "dst_port": "8080", "app_service": "tcp/8080", "app_cat": "unscanned", "app_name": "", "app_id": ""},
+                {"net_proto": "17", "dst_port": "8080", "app_service": "tcp/8080", "app_cat": "unscanned", "app_name": "", "app_id": ""},
+                {"net_proto": "6", "dst_port": "80", "app_service": "tcp/8080", "app_cat": "unscanned", "app_name": "", "app_id": ""},
+                {"net_proto": "17", "dst_port": "53", "app_service": "DNS", "app_cat": "Network.Service", "app_name": "", "app_id": ""},
+            ]
+        )
+
+        summary = result["service_protocol_port_summary"]
+        self.assertLessEqual(summary["reported_group_count"], summary["service_group_limit"])
+        numeric = result["numeric_service_label_alignment"]["labels"][0]
+        self.assertEqual(numeric["app_service"], "tcp/8080")
+        self.assertEqual(numeric["derived_protocol_name"], "TCP")
+        self.assertEqual(numeric["derived_destination_port"], "8080")
+        self.assertEqual(numeric["matches_protocol_and_destination_port_count"], 1)
+        self.assertEqual(numeric["protocol_mismatch_count"], 1)
+        self.assertEqual(numeric["destination_port_mismatch_count"], 1)
+        self.assertEqual(numeric["data_quality_status"], "UNKNOWN")
+
+    def test_application_field_population_is_grouped_by_protocol(self) -> None:
+        result = analyze_rows(
+            [
+                {"net_proto": "6", "app_service": "HTTPS", "app_cat": "unscanned", "app_name": "", "app_id": ""},
+                {"net_proto": "6", "app_service": "RDP", "app_cat": "Remote.Access", "app_name": "AnyDesk", "app_id": "39164"},
+            ]
+        )
+
+        protocol_summary = result["application_field_population_by_protocol"][0]
+        self.assertEqual(protocol_summary["net_proto_raw"], "6")
+        self.assertEqual(protocol_summary["derived_protocol_name"], "TCP")
+        self.assertEqual(protocol_summary["fields"]["app_name"]["non_missing_count"], 1)
+        self.assertEqual(protocol_summary["fields"]["app_id"]["missing_count"], 1)
 
 
 if __name__ == "__main__":

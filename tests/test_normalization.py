@@ -20,6 +20,14 @@ from normalization.models import (  # noqa: E402
     NormalizedSecurityEvent,
     SourceRecord,
 )
+from data_quality import KNOWN_FORTIGATE_COLUMNS  # noqa: E402
+from normalization.fortigate_mapping import (  # noqa: E402
+    MAPPING_CATEGORIES,
+    FORTIGATE_FIELD_MAPPINGS,
+    FortiGateFieldMapping,
+    FortiGateMappingError,
+    validate_fortigate_mapping_specification,
+)
 
 
 def build_event() -> NormalizedSecurityEvent:
@@ -56,6 +64,28 @@ def build_event() -> NormalizedSecurityEvent:
         ),
         normalization_issues=(),
     )
+
+
+def documented_mapping_rows() -> list[tuple[str, ...]]:
+    """Read the checked-in Stage 1.3B table without inspecting source data."""
+
+    path = PROJECT_ROOT / "docs" / "fortigate_normalization_mapping.md"
+    rows: list[tuple[str, ...]] = []
+    in_table = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line == "## Complete 58-field mapping table":
+            in_table = True
+            continue
+        if in_table and line.startswith("## "):
+            break
+        if not in_table or not line.startswith("| "):
+            continue
+
+        cells = tuple(cell.strip() for cell in line.strip().split("|")[1:-1])
+        if cells[0] == "Source field" or set(cells[0]) == {"-"}:
+            continue
+        rows.append(cells)
+    return rows
 
 
 class NormalizationContractTests(unittest.TestCase):
@@ -160,6 +190,87 @@ class NormalizationContractTests(unittest.TestCase):
             "mitre",
         ):
             self.assertNotIn(prohibited_field, rendered)
+
+    def test_fortigate_mapping_has_every_verified_field_in_header_order(self) -> None:
+        validate_fortigate_mapping_specification()
+
+        fields = tuple(mapping.source_field for mapping in FORTIGATE_FIELD_MAPPINGS)
+        self.assertEqual(len(fields), 58)
+        self.assertEqual(len(set(fields)), 58)
+        self.assertEqual(fields, KNOWN_FORTIGATE_COLUMNS)
+
+    def test_fortigate_mapping_rules_use_supported_categories_and_statuses(self) -> None:
+        for mapping in FORTIGATE_FIELD_MAPPINGS:
+            self.assertIn(mapping.mapping_category, MAPPING_CATEGORIES)
+            self.assertTrue(mapping.operations)
+            self.assertTrue(mapping.interpretation_status)
+            self.assertTrue(mapping.missingness_status)
+            self.assertTrue(mapping.source_representation)
+            self.assertTrue(mapping.target_type)
+            self.assertTrue(mapping.conversion_failure_behavior)
+            self.assertTrue(mapping.rationale)
+
+        with self.assertRaisesRegex(FortiGateMappingError, "not supported"):
+            FortiGateFieldMapping(
+                source_field="example_field",
+                canonical_paths=("event.example",),
+                mapping_category="UNSUPPORTED",
+                source_representation="string",
+                target_type="string_or_null",
+                operations=("COPIED",),
+                interpretation_status="VERIFIED",
+                missingness_status="UNKNOWN",
+                conversion_failure_behavior="not_converted_preserve_raw",
+                rationale="Synthetic invalid category.",
+            )
+
+    def test_mapping_keeps_timestamp_identifier_and_threat_boundaries(self) -> None:
+        by_field = {
+            mapping.source_field: mapping for mapping in FORTIGATE_FIELD_MAPPINGS
+        }
+
+        data_timestamp = by_field["data_timestamp"]
+        self.assertEqual(data_timestamp.mapping_category, "PRESERVED_UNMAPPED")
+        self.assertEqual(data_timestamp.canonical_paths, ())
+        self.assertEqual(data_timestamp.interpretation_status, "UNKNOWN")
+
+        for field in ("src_ip", "dst_ip", "host_ip", "src_mac", "dst_mac", "host_mac"):
+            mapping = by_field[field]
+            self.assertIn("opaque_identifier", mapping.target_type)
+            self.assertNotIn("ip_address", mapping.target_type)
+            self.assertNotIn("mac_address", mapping.target_type)
+
+        for field in (
+            "threat_action",
+            "threat_name",
+            "threat_severity",
+            "threat_type",
+            "threat_pattern",
+            "threat_id",
+            "threat_ref",
+        ):
+            mapping = by_field[field]
+            self.assertEqual(mapping.mapping_category, "PRESERVED_OBSERVATION")
+            self.assertTrue(
+                all(path.startswith("threat_observations.") for path in mapping.canonical_paths)
+            )
+            self.assertNotIn("label", " ".join(mapping.canonical_paths))
+
+    def test_documentation_table_matches_machine_readable_mapping_decisions(self) -> None:
+        expected_rows = [
+            mapping.documentation_row() for mapping in FORTIGATE_FIELD_MAPPINGS
+        ]
+        self.assertEqual(documented_mapping_rows(), expected_rows)
+
+        unmapped_fields = [
+            mapping.source_field
+            for mapping in FORTIGATE_FIELD_MAPPINGS
+            if mapping.mapping_category == "PRESERVED_UNMAPPED"
+        ]
+        self.assertEqual(
+            unmapped_fields,
+            ["adom_oid", "data_timestamp", "epid", "euid", "event_profile"],
+        )
 
 
 if __name__ == "__main__":

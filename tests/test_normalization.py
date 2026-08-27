@@ -50,6 +50,10 @@ from normalize_dataset import (  # noqa: E402
     main as normalize_dataset_main,
     normalize_fortigate_csv,
 )
+from audit_normalized_output import (  # noqa: E402
+    NormalizedOutputAuditError,
+    audit_normalized_jsonl,
+)
 
 
 def build_event() -> NormalizedSecurityEvent:
@@ -667,6 +671,83 @@ class FortiGateNormalizerTests(unittest.TestCase):
             issue.issue_code for issue in validate_normalized_event(invalid_event)
         }
         self.assertIn("PROVENANCE_MISSING", validation_codes)
+
+
+class NormalizedOutputAuditTests(unittest.TestCase):
+    """Synthetic tests for the Stage 1.3F streaming output audit."""
+
+    def setUp(self) -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.directory = Path(self._directory.name)
+
+    def tearDown(self) -> None:
+        self._directory.cleanup()
+
+    def write_events(self, filename: str, events: list[NormalizedSecurityEvent]) -> Path:
+        path = self.directory / filename
+        with path.open("w", encoding="utf-8", newline="\n") as output_file:
+            for event in events:
+                output_file.write(
+                    json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
+                    + "\n"
+                )
+        return path
+
+    def test_audit_streams_valid_events_and_reconciles_aggregate_evidence(self) -> None:
+        events = [
+            normalize_fortigate_record(
+                FortiGateNormalizerTests.build_record(record_number=1)
+            ),
+            normalize_fortigate_record(
+                FortiGateNormalizerTests.build_record(record_number=2)
+            ),
+            normalize_fortigate_record(
+                FortiGateNormalizerTests.build_record(
+                    record_number=3, overrides={"itime": ""}
+                )
+            ),
+        ]
+        path = self.write_events("valid.jsonl", events)
+
+        audit = audit_normalized_jsonl(path, expected_record_count=3)
+
+        self.assertEqual(audit.output_record_count, 3)
+        self.assertEqual(audit.mapping_coverage["unexpected_source_field_values"], 0)
+        self.assertEqual(audit.unknown_field_names, ())
+        self.assertGreater(audit.mapping_coverage["known_mapped_field_values"], 0)
+
+    def test_audit_rejects_an_output_record_count_mismatch(self) -> None:
+        path = self.write_events(
+            "count-mismatch.jsonl",
+            [
+                normalize_fortigate_record(
+                    FortiGateNormalizerTests.build_record(record_number=1)
+                )
+            ],
+        )
+
+        with self.assertRaises(NormalizedOutputAuditError) as caught:
+            audit_normalized_jsonl(path, expected_record_count=2)
+
+        self.assertEqual(caught.exception.code, "OUTPUT_RECORD_COUNT_MISMATCH")
+
+    def test_audit_rejects_a_timestamp_boundary_violation(self) -> None:
+        event_data = normalize_fortigate_record(
+            FortiGateNormalizerTests.build_record(record_number=1)
+        ).to_dict()
+        event_data["time"]["data_timestamp"] = event_data["source_record"][
+            "data_timestamp"
+        ]
+        path = self.directory / "timestamp-boundary.jsonl"
+        path.write_text(
+            json.dumps(event_data, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(NormalizedOutputAuditError) as caught:
+            audit_normalized_jsonl(path, expected_record_count=1)
+
+        self.assertEqual(caught.exception.code, "DATA_TIMESTAMP_BOUNDARY_VIOLATION")
 
 
 class StreamingNormalizationTests(unittest.TestCase):

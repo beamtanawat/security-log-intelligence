@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
 import json
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,6 +30,12 @@ from normalization.fortigate_mapping import (  # noqa: E402
     FortiGateFieldMapping,
     FortiGateMappingError,
     validate_fortigate_mapping_specification,
+)
+from parsers.fortigate import (  # noqa: E402
+    BASELINE_FORTIGATE_FIELDS,
+    FORTIGATE_SOURCE_TYPE,
+    FortiGateAdapterError,
+    iter_fortigate_records,
 )
 
 
@@ -271,6 +280,136 @@ class NormalizationContractTests(unittest.TestCase):
             unmapped_fields,
             ["adom_oid", "data_timestamp", "epid", "euid", "event_profile"],
         )
+
+
+class FortiGateAdapterTests(unittest.TestCase):
+    """Synthetic tests for the read-only Stage 1.3C FortiGate adapter."""
+
+    def setUp(self) -> None:
+        self._temporary_directory = tempfile.TemporaryDirectory()
+        self.directory = Path(self._temporary_directory.name)
+
+    def tearDown(self) -> None:
+        self._temporary_directory.cleanup()
+
+    def write_csv(
+        self,
+        filename: str,
+        header: list[str],
+        rows: list[list[str]],
+        *,
+        encoding: str = "utf-8-sig",
+    ) -> Path:
+        path = self.directory / filename
+        with path.open("w", encoding=encoding, newline="") as output_file:
+            writer = csv.writer(output_file)
+            writer.writerow(header)
+            writer.writerows(rows)
+        return path
+
+    @staticmethod
+    def raw_values(header: list[str], suffix: str) -> list[str]:
+        values = [f"raw-{suffix}-{field}" for field in header]
+        values[header.index("src_ip")] = f"SRCIP_{suffix}"
+        values[header.index("dst_ip")] = f"DSTIP_{suffix}"
+        values[header.index("host_mac")] = f"HOSTMAC_{suffix}"
+        return values
+
+    def assert_adapter_error(self, code: str, path: Path) -> FortiGateAdapterError:
+        with self.assertRaises(FortiGateAdapterError) as caught:
+            list(iter_fortigate_records(path))
+        self.assertEqual(caught.exception.code, code)
+        return caught.exception
+
+    def test_adapter_preserves_bom_raw_values_and_input_order(self) -> None:
+        header = list(reversed(BASELINE_FORTIGATE_FIELDS))
+        first_row = self.raw_values(header, "ONE")
+        second_row = self.raw_values(header, "TWO")
+        path = self.write_csv("valid.csv", header, [first_row, second_row])
+
+        records = list(iter_fortigate_records(path))
+
+        self.assertEqual([record.record_number for record in records], [1, 2])
+        self.assertTrue(all(record.source_type == FORTIGATE_SOURCE_TYPE for record in records))
+        self.assertEqual(tuple(records[0].fields), tuple(header))
+        self.assertEqual(records[0].fields, dict(zip(header, first_row)))
+        self.assertEqual(records[1].fields, dict(zip(header, second_row)))
+        self.assertEqual(records[0].fields["src_ip"], "SRCIP_ONE")
+        self.assertEqual(records[0].fields["host_mac"], "HOSTMAC_ONE")
+
+    def test_adapter_rejects_empty_and_header_only_files(self) -> None:
+        empty_path = self.directory / "empty.csv"
+        empty_path.write_bytes(b"")
+        self.assert_adapter_error("EMPTY_CSV", empty_path)
+
+        header_only_path = self.write_csv(
+            "header-only.csv", list(BASELINE_FORTIGATE_FIELDS), []
+        )
+        self.assert_adapter_error("HEADER_ONLY_CSV", header_only_path)
+
+    def test_adapter_rejects_blank_and_duplicate_header_names(self) -> None:
+        blank_header = list(BASELINE_FORTIGATE_FIELDS)
+        blank_header[0] = " "
+        blank_path = self.write_csv("blank-header.csv", blank_header, [])
+        self.assert_adapter_error("BLANK_HEADER", blank_path)
+
+        duplicate_header = list(BASELINE_FORTIGATE_FIELDS)
+        duplicate_header[1] = duplicate_header[0]
+        duplicate_path = self.write_csv("duplicate-header.csv", duplicate_header, [])
+        self.assert_adapter_error("DUPLICATE_HEADER", duplicate_path)
+
+    def test_adapter_rejects_missing_baseline_fields(self) -> None:
+        header = [field for field in BASELINE_FORTIGATE_FIELDS if field != "loguid"]
+        path = self.write_csv("missing-field.csv", header, [])
+
+        error = self.assert_adapter_error("MISSING_BASELINE_FIELDS", path)
+
+        self.assertIn("loguid", str(error))
+
+    def test_adapter_preserves_extra_unique_columns_as_source_evidence(self) -> None:
+        header = [*BASELINE_FORTIGATE_FIELDS, "future_vendor_field"]
+        row = self.raw_values(header, "EXTRA")
+        row[-1] = "future raw value"
+        path = self.write_csv("extra-column.csv", header, [row])
+
+        record = next(iter_fortigate_records(path))
+
+        self.assertEqual(record.fields["future_vendor_field"], "future raw value")
+        self.assertEqual(tuple(record.fields), tuple(header))
+
+    def test_adapter_rejects_malformed_row_widths(self) -> None:
+        header = list(BASELINE_FORTIGATE_FIELDS)
+        path = self.write_csv("malformed-width.csv", header, [["too", "short"]])
+
+        error = self.assert_adapter_error("ROW_WIDTH_MISMATCH", path)
+
+        self.assertEqual(error.record_number, 1)
+
+    def test_adapter_rejects_invalid_utf8(self) -> None:
+        path = self.directory / "invalid-utf8.csv"
+        path.write_bytes(b"\xff\xfe\xff")
+
+        self.assert_adapter_error("INVALID_UTF8", path)
+
+    def test_adapter_detects_a_source_change_during_iteration(self) -> None:
+        header = list(BASELINE_FORTIGATE_FIELDS)
+        path = self.write_csv(
+            "changed-source.csv",
+            header,
+            [self.raw_values(header, "ONE"), self.raw_values(header, "TWO")],
+        )
+        records = iter_fortigate_records(path)
+
+        self.assertEqual(next(records).record_number, 1)
+        original_status = path.stat()
+        os.utime(
+            path,
+            ns=(original_status.st_atime_ns, original_status.st_mtime_ns + 1_000_000_000),
+        )
+
+        with self.assertRaises(FortiGateAdapterError) as caught:
+            next(records)
+        self.assertEqual(caught.exception.code, "SOURCE_CHANGED")
 
 
 if __name__ == "__main__":

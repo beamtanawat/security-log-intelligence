@@ -102,3 +102,35 @@ real-data validation. `git diff --check` passed. No file beneath `data/raw/` or
 mapping/provenance, determinism, output-safety, test-suite, and Git-safety
 checks. This is an audit result only; Stage 1.3G and any detection work remain
 outside this checkpoint.
+
+## Stage 1.3G Reconciliation and Readiness
+
+Stage 1.3G reconciled the completed schema contract, 58-field mapping
+specification, streaming adapter, record normalizer, JSON Lines CLI, output
+audit, synthetic tests, and their supporting documentation. The final validator
+repeated the real-data normalization and audit without changing the immutable
+raw file.
+
+| Reconciliation item | Evidence |
+| --- | --- |
+| Schema and serialization contract | `docs/normalized_event_schema.md`, `src/normalization/models.py`, and contract tests |
+| FortiGate field decisions | `docs/fortigate_normalization_mapping.md`, `src/normalization/fortigate_mapping.py`, and documentation/mapping test |
+| Read-only source handling | `src/parsers/fortigate.py` and adapter tests |
+| One-record normalization and provenance | `src/normalization/fortigate.py`, `src/normalization/validation.py`, and normalizer tests |
+| Streaming publication and audit | `src/normalize_dataset.py`, `src/audit_normalized_output.py`, and streaming/audit tests |
+| Final real-data gate | 100,000 records, matching primary/secondary output hashes, raw hash unchanged, and 68 synthetic tests passed before and after |
+
+The reconciliation retains the existing evidence boundaries: `data_timestamp`
+is preserved/unmapped with **UNKNOWN** semantics; the UTC view derived from
+`itime` remains **DERIVED** with `NEEDS_VERIFICATION`; session-duration units
+remain unresolved; and opaque sanitized identifiers, repeated session records,
+and threat/application/event values retain their source-only meaning. No raw
+source value is silently discarded by the established mapping/provenance audit.
+
+## Final Stage 1.3 Verdict
+
+**PASS.** The normalized output is structurally, deterministically, and
+provenance-consistently validated as the input boundary for a separately planned
+rule-based detection stage. This verdict does not establish product semantics
+for unresolved fields and does not implement detection, attack labels, risk
+scoring, machine learning, APIs, or deployment.

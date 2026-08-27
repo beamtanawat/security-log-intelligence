@@ -155,3 +155,17 @@ python .\src\normalize_dataset.py --source fortigate --input <source.csv> --outp
   the final output only after a successful complete run.
 - The command prints one bounded JSON run summary, not normalized records. Structural
   and invalid-path failures use nonzero exit codes and remove the temporary file.
+
+## Stage 1.3 audit relationship
+
+The Stage 1.3F output audit reconstructs serialized events under this contract
+and applies the established FortiGate mapping/provenance validation to each
+record without retaining the full JSON Lines file in memory. It verifies
+contract sections, contiguous logical record order, source-record preservation,
+and the documented uncertainty boundaries. It does not revise the schema,
+assign security meaning, or turn source observations into labels.
+
+The audit requires `data_timestamp` to remain preserved and unmapped, and
+requires the optional `itime` UTC view to retain its `NEEDS_VERIFICATION`
+interpretation status. A successful audit is structural and preservation
+evidence only; it is not a detection or classification result.

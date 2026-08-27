@@ -122,3 +122,17 @@ structured issues for non-empty invalid values.
 This specification does not authorize source parsing, record transformation,
 output generation, enrichment, labels, detection, scoring, machine learning, APIs,
 or a second source adapter.
+
+## Stage 1.3 implementation reconciliation
+
+The record normalizer consumes `FORTIGATE_FIELD_MAPPINGS` as its complete
+58-field decision source. The Stage 1.3F audit measured 5,300,000 mapped and
+500,000 preserved-unmapped field values across 100,000 records, with zero
+unexpected source fields. Those counts reconcile to 5,800,000 source-field
+decisions and do not change any mapping category, canonical path, status, or
+rationale in this specification.
+
+The audit also verifies that preserved-unmapped and unknown fields remain
+recoverable, that mapped values have required provenance, and that the timestamp,
+opaque-identifier, session, and threat-observation boundaries above remain in
+effect. These validation results do not establish a new source semantic.

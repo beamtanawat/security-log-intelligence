@@ -298,6 +298,30 @@ class NormalizationContractTests(unittest.TestCase):
             ["adom_oid", "data_timestamp", "epid", "euid", "event_profile"],
         )
 
+    def test_stage_1_3_documentation_cross_references_contract_mapping_and_audit(self) -> None:
+        schema_document = (PROJECT_ROOT / "docs" / "normalized_event_schema.md").read_text(
+            encoding="utf-8"
+        )
+        mapping_document = (
+            PROJECT_ROOT / "docs" / "fortigate_normalization_mapping.md"
+        ).read_text(encoding="utf-8")
+        findings_document = (
+            PROJECT_ROOT / "docs" / "stage_1_3_normalization_findings.md"
+        ).read_text(encoding="utf-8")
+        readme_document = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("## Stage 1.3 audit relationship", schema_document)
+        self.assertIn("NEEDS_VERIFICATION", schema_document)
+        self.assertIn("## Stage 1.3 implementation reconciliation", mapping_document)
+        self.assertIn("5,800,000 source-field", mapping_document)
+        self.assertIn("## Contract Boundaries Confirmed", findings_document)
+        self.assertIn("100,000", findings_document)
+        self.assertIn("5,300,000", findings_document)
+        self.assertIn("500,000", findings_document)
+        self.assertIn("## Stage 1.3G Reconciliation and Readiness", findings_document)
+        self.assertIn("## Final Stage 1.3 Verdict", findings_document)
+        self.assertIn("Stage 1.3 — Evidence-Preserving FortiGate Normalization", readme_document)
+
 
 class FortiGateAdapterTests(unittest.TestCase):
     """Synthetic tests for the read-only Stage 1.3C FortiGate adapter."""

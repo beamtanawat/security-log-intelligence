@@ -40,6 +40,21 @@ Current priorities:
 
 No machine learning is used at this stage.
 
+### Stage 1.3 — Evidence-Preserving FortiGate Normalization — Complete
+
+Stage 1.3 establishes a streaming, read-only FortiGate normalization path:
+an explicit event-schema contract, a 58-field mapping specification, a source
+adapter, record-level normalization, deterministic JSON Lines output, and an
+all-record output audit. The final reconciliation passed against the sanitized
+100,000-record export while preserving documented unknowns and source evidence.
+
+This completion makes the normalized output available for a separately planned
+rule-based detection stage. It does not implement or authorize detection,
+classification, scoring, machine learning, APIs, or deployment. See
+[`docs/normalized_event_schema.md`](docs/normalized_event_schema.md),
+[`docs/fortigate_normalization_mapping.md`](docs/fortigate_normalization_mapping.md),
+and [`docs/stage_1_3_normalization_findings.md`](docs/stage_1_3_normalization_findings.md).
+
 ## Current Dataset
 
 The initial dataset is:

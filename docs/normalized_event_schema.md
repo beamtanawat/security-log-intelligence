@@ -138,3 +138,20 @@ decoded source string remains an empty string in source_record.
 - Unknown source fields and categories are represented safely rather than dropped.
 - File parsing, source-specific mapping, conversion policy, JSON Lines output, and
   real-data execution are outside checkpoint 1.3A.
+
+## Streaming normalization CLI and output contract
+
+Checkpoint 1.3E provides a FortiGate-only streaming command:
+
+```powershell
+python .\src\normalize_dataset.py --source fortigate --input <source.csv> --output <data/processed/output.jsonl>
+```
+
+- `--source fortigate` is required; no source type is auto-detected.
+- The output must be a new file beneath `data/processed/` and must differ from the
+  input path. Existing final outputs are rejected rather than overwritten.
+- The command writes compact UTF-8 JSON Lines with deterministic object key order.
+  It uses a uniquely named temporary file beneath `data/processed/` and publishes
+  the final output only after a successful complete run.
+- The command prints one bounded JSON run summary, not normalized records. Structural
+  and invalid-path failures use nonzero exit codes and remove the temporary file.

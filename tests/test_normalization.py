@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
+import io
 import json
 import os
 import sys
@@ -42,6 +44,12 @@ from parsers.fortigate import (  # noqa: E402
     iter_fortigate_records,
 )
 from normalization.validation import validate_normalized_event  # noqa: E402
+from normalize_dataset import (  # noqa: E402
+    PROCESSED_DATA_DIRECTORY,
+    NormalizationRunError,
+    main as normalize_dataset_main,
+    normalize_fortigate_csv,
+)
 
 
 def build_event() -> NormalizedSecurityEvent:
@@ -659,6 +667,172 @@ class FortiGateNormalizerTests(unittest.TestCase):
             issue.issue_code for issue in validate_normalized_event(invalid_event)
         }
         self.assertIn("PROVENANCE_MISSING", validation_codes)
+
+
+class StreamingNormalizationTests(unittest.TestCase):
+    """Synthetic end-to-end tests for the Stage 1.3E streaming output path."""
+
+    def setUp(self) -> None:
+        self._input_directory = tempfile.TemporaryDirectory()
+        self._output_directory = tempfile.TemporaryDirectory(
+            dir=PROCESSED_DATA_DIRECTORY
+        )
+        self.input_directory = Path(self._input_directory.name)
+        self.output_directory = Path(self._output_directory.name)
+
+    def tearDown(self) -> None:
+        self._input_directory.cleanup()
+        self._output_directory.cleanup()
+
+    def write_input(self, filename: str, records: list[SourceRecord]) -> Path:
+        path = self.input_directory / filename
+        header = list(BASELINE_FORTIGATE_FIELDS)
+        with path.open("w", encoding="utf-8-sig", newline="") as output_file:
+            writer = csv.writer(output_file)
+            writer.writerow(header)
+            writer.writerows(
+                [[record.fields[field] for field in header] for record in records]
+            )
+        return path
+
+    @staticmethod
+    def json_lines(path: Path) -> list[dict[str, object]]:
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def test_streaming_normalization_preserves_record_count_and_order(self) -> None:
+        input_path = self.write_input(
+            "two-records.csv",
+            [
+                FortiGateNormalizerTests.build_record(record_number=1),
+                FortiGateNormalizerTests.build_record(record_number=2),
+            ],
+        )
+        output_path = self.output_directory / "normalized.jsonl"
+
+        summary = normalize_fortigate_csv(input_path, output_path)
+        output_records = self.json_lines(output_path)
+
+        self.assertEqual(summary.input_record_count, 2)
+        self.assertEqual(summary.valid_record_count, 2)
+        self.assertEqual(summary.malformed_record_count, 0)
+        self.assertEqual(summary.output_record_count, 2)
+        self.assertEqual(len(output_records), 2)
+        self.assertEqual(
+            [record["source"]["record_number"] for record in output_records], [1, 2]
+        )
+        self.assertEqual(
+            [record["session"]["identifier"] for record in output_records],
+            ["SESSION_REPEATED", "SESSION_REPEATED"],
+        )
+        self.assertEqual(summary.mapping_coverage["unexpected_source_field_values"], 0)
+
+    def test_streaming_output_is_byte_for_byte_deterministic(self) -> None:
+        input_path = self.write_input(
+            "deterministic.csv", [FortiGateNormalizerTests.build_record()]
+        )
+        first_output = self.output_directory / "first.jsonl"
+        second_output = self.output_directory / "second.jsonl"
+
+        normalize_fortigate_csv(input_path, first_output)
+        normalize_fortigate_csv(input_path, second_output)
+
+        self.assertEqual(first_output.read_bytes(), second_output.read_bytes())
+
+    def test_streaming_summary_reconciles_conversion_issues(self) -> None:
+        input_path = self.write_input(
+            "invalid-port.csv",
+            [FortiGateNormalizerTests.build_record(overrides={"src_port": "invalid"})],
+        )
+        output_path = self.output_directory / "invalid-port.jsonl"
+
+        summary = normalize_fortigate_csv(input_path, output_path)
+        output_record = self.json_lines(output_path)[0]
+
+        self.assertEqual(summary.issue_counts["INVALID_PORT"], 1)
+        self.assertIn(
+            "INVALID_PORT",
+            {issue["issue_code"] for issue in output_record["normalization_issues"]},
+        )
+
+    def test_structural_failure_removes_temporary_output_without_publishing_final(self) -> None:
+        input_path = self.input_directory / "malformed.csv"
+        header = list(BASELINE_FORTIGATE_FIELDS)
+        with input_path.open("w", encoding="utf-8-sig", newline="") as output_file:
+            writer = csv.writer(output_file)
+            writer.writerow(header)
+            valid_record = FortiGateNormalizerTests.build_record()
+            writer.writerow([valid_record.fields[field] for field in header])
+            writer.writerow(["too", "short"])
+        output_path = self.output_directory / "malformed.jsonl"
+
+        with self.assertRaises(FortiGateAdapterError):
+            normalize_fortigate_csv(input_path, output_path)
+
+        self.assertFalse(output_path.exists())
+        self.assertEqual(
+            list(PROCESSED_DATA_DIRECTORY.glob(f".{output_path.stem}.*.tmp")), []
+        )
+
+    def test_output_path_checks_reject_unsafe_or_existing_files(self) -> None:
+        input_path = self.write_input(
+            "source.csv", [FortiGateNormalizerTests.build_record()]
+        )
+
+        with self.assertRaises(NormalizationRunError) as outside_error:
+            normalize_fortigate_csv(input_path, self.input_directory / "outside.jsonl")
+        self.assertEqual(outside_error.exception.code, "OUTPUT_OUTSIDE_PROCESSED")
+
+        processed_input = self.output_directory / "processed-input.csv"
+        processed_input.write_bytes(input_path.read_bytes())
+        with self.assertRaises(NormalizationRunError) as same_path_error:
+            normalize_fortigate_csv(processed_input, processed_input)
+        self.assertEqual(same_path_error.exception.code, "INPUT_OUTPUT_SAME")
+
+        existing_output = self.output_directory / "existing.jsonl"
+        existing_output.write_text("existing content", encoding="utf-8")
+        with self.assertRaises(NormalizationRunError) as existing_error:
+            normalize_fortigate_csv(input_path, existing_output)
+        self.assertEqual(existing_error.exception.code, "OUTPUT_EXISTS")
+        self.assertEqual(existing_output.read_text(encoding="utf-8"), "existing content")
+
+    def test_cli_requires_fortigate_and_prints_only_a_bounded_summary(self) -> None:
+        input_path = self.write_input(
+            "cli.csv", [FortiGateNormalizerTests.build_record()]
+        )
+        output_path = self.output_directory / "cli.jsonl"
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            exit_code = normalize_dataset_main(
+                [
+                    "--source",
+                    "unsupported",
+                    "--input",
+                    str(input_path),
+                    "--output",
+                    str(output_path),
+                ]
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertFalse(output_path.exists())
+        self.assertIn("--source must be 'fortigate'", stderr.getvalue())
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = normalize_dataset_main(
+                [
+                    "--source",
+                    "fortigate",
+                    "--input",
+                    str(input_path),
+                    "--output",
+                    str(output_path),
+                ]
+            )
+        self.assertEqual(exit_code, 0)
+        rendered_summary = json.loads(stdout.getvalue())
+        self.assertEqual(rendered_summary["output_record_count"], 1)
+        self.assertTrue(output_path.exists())
 
 
 if __name__ == "__main__":

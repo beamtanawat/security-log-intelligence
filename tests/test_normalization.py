@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 import json
 import os
 import sys
@@ -31,12 +32,16 @@ from normalization.fortigate_mapping import (  # noqa: E402
     FortiGateMappingError,
     validate_fortigate_mapping_specification,
 )
+from normalization.fortigate import (  # noqa: E402
+    normalize_fortigate_record,
+)
 from parsers.fortigate import (  # noqa: E402
     BASELINE_FORTIGATE_FIELDS,
     FORTIGATE_SOURCE_TYPE,
     FortiGateAdapterError,
     iter_fortigate_records,
 )
+from normalization.validation import validate_normalized_event  # noqa: E402
 
 
 def build_event() -> NormalizedSecurityEvent:
@@ -410,6 +415,250 @@ class FortiGateAdapterTests(unittest.TestCase):
         with self.assertRaises(FortiGateAdapterError) as caught:
             next(records)
         self.assertEqual(caught.exception.code, "SOURCE_CHANGED")
+
+
+class FortiGateNormalizerTests(unittest.TestCase):
+    """Synthetic tests for the pure Stage 1.3D FortiGate normalizer."""
+
+    @staticmethod
+    def build_record(
+        *,
+        record_number: int = 1,
+        overrides: dict[str, str | None] | None = None,
+        extra_fields: dict[str, str | None] | None = None,
+    ) -> SourceRecord:
+        fields = {
+            field: f"raw-{field}" for field in BASELINE_FORTIGATE_FIELDS
+        }
+        fields.update(
+            {
+                "itime": "1700000000",
+                "data_timestamp": "1700000000123",
+                "src_ip": "SRCIP_OPAQUE",
+                "dst_ip": "DSTIP_OPAQUE",
+                "host_ip": "HOSTIP_OPAQUE",
+                "src_mac": "SRCMAC_OPAQUE",
+                "dst_mac": "DSTMAC_OPAQUE",
+                "host_mac": "HOSTMAC_OPAQUE",
+                "src_port": "51515",
+                "dst_port": "443",
+                "net_proto": "6",
+                "net_rcvdpkts": "10",
+                "net_recvbytes": "1000",
+                "net_sentbytes": "2000",
+                "net_sentpkts": "20",
+                "net_sessionduration": "30",
+                "net_sessionid": "SESSION_REPEATED",
+                "loguid": f"LOG_{record_number}",
+                "app_cat": "network",
+                "app_service": "HTTPS",
+                "app_id": "APP_001",
+                "app_name": "application-source-name",
+                "threat_action": "",
+                "threat_name": "",
+                "threat_severity": "",
+                "threat_type": "",
+                "threat_pattern": "",
+                "threat_id": "",
+                "threat_ref": "",
+            }
+        )
+        if overrides:
+            fields.update(overrides)
+        if extra_fields:
+            fields.update(extra_fields)
+        return SourceRecord(
+            source_type=FORTIGATE_SOURCE_TYPE,
+            record_number=record_number,
+            fields=fields,
+        )
+
+    def issue_codes(self, event: NormalizedSecurityEvent) -> set[str]:
+        return {issue.issue_code for issue in event.normalization_issues}
+
+    def test_normalizer_copies_opaque_values_and_records_complete_provenance(self) -> None:
+        record = self.build_record()
+
+        event = normalize_fortigate_record(record)
+
+        self.assertEqual(event.source["adapter_type"], "fortigate")
+        self.assertEqual(event.source["record_number"], 1)
+        self.assertEqual(event.network["source"]["identifier"], "SRCIP_OPAQUE")
+        self.assertEqual(event.network["destination"]["identifier"], "DSTIP_OPAQUE")
+        self.assertEqual(event.network["source"]["port"], 51515)
+        self.assertEqual(event.network["destination"]["port"], 443)
+        self.assertEqual(event.network["protocol_raw"], "6")
+        self.assertEqual(event.network["protocol_number"], 6)
+        self.assertEqual(event.network["protocol_name"], "TCP")
+        self.assertEqual(event.session["duration_raw_value"], 30)
+        self.assertTrue(event.time["itime_utc_derived"].endswith("Z"))
+        self.assertEqual(event.time["itime_utc_interpretation_status"], "NEEDS_VERIFICATION")
+        self.assertEqual(event.source_record.fields["src_ip"], "SRCIP_OPAQUE")
+        self.assertIn("data_timestamp", event.unmapped_fields)
+        provenance_paths = {item.canonical_path for item in event.provenance}
+        self.assertIn("network.source.identifier", provenance_paths)
+        self.assertIn("network.protocol_name", provenance_paths)
+        self.assertIn("time.itime_utc_derived", provenance_paths)
+        self.assertEqual(validate_normalized_event(event), [])
+
+    def test_normalizer_marks_both_missing_icmp_ports_as_expected_not_invalid(self) -> None:
+        record = self.build_record(
+            overrides={"net_proto": "1", "src_port": "", "dst_port": " "}
+        )
+
+        event = normalize_fortigate_record(record)
+
+        self.assertEqual(event.network["protocol_name"], "ICMP")
+        self.assertIsNone(event.network["source"]["port"])
+        self.assertIsNone(event.network["destination"]["port"])
+        expected_issues = [
+            issue
+            for issue in event.normalization_issues
+            if issue.issue_code == "MISSING_PORTS_EXPECTED_FOR_ICMP"
+        ]
+        self.assertEqual(len(expected_issues), 1)
+        self.assertEqual(expected_issues[0].status, "EXPECTED")
+        self.assertFalse(
+            any(
+                issue.issue_code == "INVALID_PORT"
+                for issue in event.normalization_issues
+            )
+        )
+
+    def test_normalizer_converts_boundary_ports_and_nonnegative_session_metrics(self) -> None:
+        record = self.build_record(
+            overrides={
+                "src_port": "0",
+                "dst_port": "65535",
+                "net_rcvdpkts": "0",
+                "net_recvbytes": "1",
+                "net_sentbytes": "2",
+                "net_sentpkts": "3",
+                "net_sessionduration": "4",
+            }
+        )
+
+        event = normalize_fortigate_record(record)
+
+        self.assertEqual(event.network["source"]["port"], 0)
+        self.assertEqual(event.network["destination"]["port"], 65535)
+        self.assertEqual(event.session["received_packets"], 0)
+        self.assertEqual(event.session["received_bytes"], 1)
+        self.assertEqual(event.session["sent_bytes"], 2)
+        self.assertEqual(event.session["sent_packets"], 3)
+        self.assertEqual(event.session["duration_raw_value"], 4)
+        self.assertNotIn("INVALID_PORT", self.issue_codes(event))
+        self.assertNotIn("INVALID_NONNEGATIVE_INTEGER", self.issue_codes(event))
+
+    def test_normalizer_reports_invalid_numeric_values_without_losing_raw_evidence(self) -> None:
+        record = self.build_record(
+            overrides={
+                "itime": "not-a-number",
+                "net_proto": "not-a-protocol",
+                "src_port": "-1",
+                "dst_port": "65536",
+                "net_recvbytes": "-1",
+                "net_sessionduration": "bad",
+            }
+        )
+
+        event = normalize_fortigate_record(record)
+
+        self.assertIsNone(event.time["itime_utc_derived"])
+        self.assertIsNone(event.network["protocol_number"])
+        self.assertIsNone(event.network["source"]["port"])
+        self.assertIsNone(event.network["destination"]["port"])
+        self.assertIsNone(event.session["received_bytes"])
+        self.assertIsNone(event.session["duration_raw_value"])
+        self.assertTrue(
+            {
+                "INVALID_ITIME_INTEGER",
+                "INVALID_PROTOCOL_INTEGER",
+                "INVALID_PORT",
+                "INVALID_NONNEGATIVE_INTEGER",
+            }.issubset(self.issue_codes(event))
+        )
+        self.assertEqual(event.source_record.fields["itime"], "not-a-number")
+        self.assertEqual(event.source_record.fields["src_port"], "-1")
+        self.assertEqual(event.source_record.fields["net_recvbytes"], "-1")
+
+    def test_normalizer_keeps_missing_session_metrics_contextual(self) -> None:
+        record = self.build_record(
+            overrides={field: "" for field in (
+                "net_rcvdpkts",
+                "net_recvbytes",
+                "net_sentbytes",
+                "net_sentpkts",
+                "net_sessionduration",
+            )}
+        )
+
+        event = normalize_fortigate_record(record)
+
+        self.assertTrue(all(value is None for value in event.session.values() if value != "SESSION_REPEATED"))
+        contextual = [
+            issue
+            for issue in event.normalization_issues
+            if issue.issue_code == "ALL_SESSION_METRICS_MISSING"
+        ]
+        self.assertEqual(len(contextual), 1)
+        self.assertEqual(contextual[0].status, "CONTEXT_DEPENDENT")
+
+    def test_normalizer_preserves_unknown_timestamp_and_extra_source_fields_as_unmapped(self) -> None:
+        record = self.build_record(
+            extra_fields={"future_vendor_field": "future raw evidence"}
+        )
+
+        event = normalize_fortigate_record(record)
+
+        self.assertEqual(event.unmapped_fields["data_timestamp"], "1700000000123")
+        self.assertEqual(event.unmapped_fields["future_vendor_field"], "future raw evidence")
+        self.assertNotIn("data_timestamp", event.time)
+        self.assertEqual(event.source_record.fields["future_vendor_field"], "future raw evidence")
+
+    def test_normalizer_preserves_source_observations_and_repeated_sessions_separately(self) -> None:
+        first = normalize_fortigate_record(
+            self.build_record(
+                record_number=1,
+                overrides={
+                    "threat_name": "source-threat-observation",
+                    "threat_severity": "source-severity",
+                    "app_name": "unknown-source-application",
+                },
+            )
+        )
+        second = normalize_fortigate_record(self.build_record(record_number=2))
+
+        self.assertEqual(first.session["identifier"], "SESSION_REPEATED")
+        self.assertEqual(second.session["identifier"], "SESSION_REPEATED")
+        self.assertNotEqual(first.source["record_number"], second.source["record_number"])
+        self.assertEqual(first.threat_observations["name_source"], "source-threat-observation")
+        self.assertEqual(first.threat_observations["severity_source"], "source-severity")
+        self.assertEqual(first.application["name_source"], "unknown-source-application")
+        rendered = json.dumps(first.to_dict()).lower()
+        self.assertNotIn("is_attack", rendered)
+        self.assertNotIn("risk_score", rendered)
+
+    def test_normalizer_is_deterministic_and_does_not_mutate_input(self) -> None:
+        record = self.build_record()
+        original_fields = dict(record.fields)
+
+        first = normalize_fortigate_record(record)
+        second = normalize_fortigate_record(record)
+
+        self.assertEqual(first.to_dict(), second.to_dict())
+        self.assertEqual(record.fields, original_fields)
+
+    def test_contract_validator_accepts_normalized_output_and_flags_missing_provenance(self) -> None:
+        event = normalize_fortigate_record(self.build_record())
+
+        self.assertEqual(validate_normalized_event(event), [])
+
+        invalid_event = replace(event, provenance=())
+        validation_codes = {
+            issue.issue_code for issue in validate_normalized_event(invalid_event)
+        }
+        self.assertIn("PROVENANCE_MISSING", validation_codes)
 
 
 if __name__ == "__main__":

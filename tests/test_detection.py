@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from dataclasses import fields, replace
 from pathlib import Path
 
 
@@ -23,6 +24,13 @@ from detection.models import (  # noqa: E402
     RuleMetadata,
     SourceEventReference,
     build_finding_id,
+)
+from detection.rules import (  # noqa: E402
+    ACTIVE_RULES,
+    BUILT_IN_RULES,
+    InactiveRulePlaceholder,
+    RuleRegistryError,
+    validate_rule_registry,
 )
 
 
@@ -329,3 +337,137 @@ class DetectionContractTests(unittest.TestCase):
                     ActiveRuleVersion("fortigate.a_rule", "1.0"),
                 ),
             )
+
+
+class RuleRegistryTests(unittest.TestCase):
+    def test_builtin_registry_is_ordered_unique_and_inactive(self) -> None:
+        rule_ids = tuple(rule.metadata.rule_id for rule in BUILT_IN_RULES)
+
+        self.assertEqual(rule_ids, tuple(sorted(rule_ids)))
+        self.assertEqual(len(rule_ids), len(set(rule_ids)))
+        self.assertEqual(ACTIVE_RULES, ())
+        self.assertTrue(
+            all(rule.evaluate(None) is None for rule in BUILT_IN_RULES)  # type: ignore[arg-type]
+        )
+
+    def test_registry_rejects_duplicate_and_unsorted_rule_ids(self) -> None:
+        duplicate = InactiveRulePlaceholder(BUILT_IN_RULES[0].metadata)
+        with self.assertRaises(RuleRegistryError):
+            validate_rule_registry((BUILT_IN_RULES[0], duplicate))
+        with self.assertRaises(RuleRegistryError):
+            validate_rule_registry(tuple(reversed(BUILT_IN_RULES)))
+
+        unsupported_source = InactiveRulePlaceholder(
+            replace(
+                BUILT_IN_RULES[0].metadata,
+                supported_source_types=("unsupported_source",),
+            )
+        )
+        with self.assertRaises(RuleRegistryError):
+            validate_rule_registry((unsupported_source,))
+
+    def test_initial_metadata_matches_the_approved_rule_specifications(self) -> None:
+        expected = {
+            "fortigate.anomaly_subtype_observation": {
+                "version": "1.0",
+                "category": "SOURCE_PRODUCT_OBSERVATION",
+                "severity": "INFORMATIONAL",
+                "supported_source_types": ("fortigate",),
+                "required_paths": ("event.subtype_source",),
+                "evidence_paths": (
+                    "event.action_source",
+                    "event.severity_source",
+                    "event.subtype_source",
+                    "event.type_source",
+                ),
+                "reason_code": "SOURCE_ANOMALY_SUBTYPE_OBSERVED",
+            },
+            "fortigate.source_threat_observation": {
+                "version": "1.0",
+                "category": "SOURCE_PRODUCT_OBSERVATION",
+                "severity": "INFORMATIONAL",
+                "supported_source_types": ("fortigate",),
+                "required_paths": ("threat_observations",),
+                "evidence_paths": (
+                    "threat_observations.action_source",
+                    "threat_observations.id_raw",
+                    "threat_observations.name_source",
+                    "threat_observations.pattern_source",
+                    "threat_observations.reference_source",
+                    "threat_observations.severity_source",
+                    "threat_observations.type_source",
+                ),
+                "reason_code": "SOURCE_THREAT_OBSERVATION_PRESENT",
+            },
+        }
+        actual = {
+            rule.metadata.rule_id: {
+                "version": rule.metadata.version,
+                "category": rule.metadata.category,
+                "severity": rule.metadata.severity,
+                "supported_source_types": rule.metadata.supported_source_types,
+                "required_paths": rule.metadata.required_paths,
+                "evidence_paths": rule.metadata.evidence_paths,
+                "reason_code": rule.metadata.reason_code,
+            }
+            for rule in BUILT_IN_RULES
+        }
+
+        self.assertEqual(actual, expected)
+
+    def test_initial_metadata_is_fortigate_only_informational_and_has_no_threshold_fields(self) -> None:
+        metadata_field_names = {item.name for item in fields(RuleMetadata)}
+        prohibited_field_names = {"threshold", "window", "confidence", "risk_score", "enabled"}
+
+        self.assertTrue(all(rule.metadata.supported_source_types == ("fortigate",) for rule in BUILT_IN_RULES))
+        self.assertTrue(all(rule.metadata.severity == "INFORMATIONAL" for rule in BUILT_IN_RULES))
+        self.assertEqual(metadata_field_names & prohibited_field_names, set())
+
+        rules_source = (PROJECT_ROOT / "src" / "detection" / "rules.py").read_text(
+            encoding="utf-8"
+        )
+        for prohibited_token in ("importlib", "eval(", "exec("):
+            self.assertNotIn(prohibited_token, rules_source)
+
+    def test_documented_registry_catalog_matches_metadata(self) -> None:
+        document = (
+            PROJECT_ROOT / "docs" / "initial_detection_rules.md"
+        ).read_text(encoding="utf-8")
+        rows = documented_registry_catalog(document)
+        expected_rows = {
+            rule.metadata.rule_id: (
+                rule.metadata.version,
+                rule.metadata.category,
+                rule.metadata.severity,
+                "; ".join(rule.metadata.supported_source_types),
+                "; ".join(rule.metadata.required_paths),
+                "; ".join(rule.metadata.evidence_paths),
+                rule.metadata.reason_code,
+                "No",
+            )
+            for rule in BUILT_IN_RULES
+        }
+
+        self.assertEqual(rows, expected_rows)
+        self.assertEqual(document.count("| Review item | Approved answer |"), 2)
+        self.assertIn("Rule Match != Confirmed Attack", document)
+
+
+def documented_registry_catalog(document: str) -> dict[str, tuple[str, ...]]:
+    """Read the checked-in 1.4B catalog without evaluating any rule."""
+
+    rows: dict[str, tuple[str, ...]] = {}
+    in_catalog = False
+    for line in document.splitlines():
+        if line == "## Registry Catalog":
+            in_catalog = True
+            continue
+        if in_catalog and line.startswith("## "):
+            break
+        if not in_catalog or not line.startswith("| "):
+            continue
+        cells = tuple(cell.strip().replace("`", "") for cell in line.strip().split("|")[1:-1])
+        if cells[0] == "Rule ID" or set(cells[0]) == {"-"}:
+            continue
+        rows[cells[0]] = cells[1:]
+    return rows

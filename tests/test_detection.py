@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import unittest
-from dataclasses import fields, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 
@@ -31,6 +32,14 @@ from detection.rules import (  # noqa: E402
     InactiveRulePlaceholder,
     RuleRegistryError,
     validate_rule_registry,
+)
+from detection.engine import DetectionEngineError, evaluate_event  # noqa: E402
+from detection.input import DetectionInputError, iter_normalized_events  # noqa: E402
+from normalization.fortigate import normalize_fortigate_record  # noqa: E402
+from normalization.models import SourceRecord  # noqa: E402
+from parsers.fortigate import (  # noqa: E402
+    BASELINE_FORTIGATE_FIELDS,
+    FORTIGATE_SOURCE_TYPE,
 )
 
 
@@ -92,6 +101,91 @@ def build_finding() -> DetectionFinding:
         time_basis="NOT_USED",
         uncertainties=("The source observation is not ground truth.",),
         false_positive_note="Legitimate source-product classifications can match.",
+    )
+
+
+def build_detection_event(
+    *,
+    record_number: int = 1,
+    overrides: dict[str, str | None] | None = None,
+):
+    """Build one valid, in-memory FortiGate normalized event for detection tests."""
+
+    fields = {field: "" for field in BASELINE_FORTIGATE_FIELDS}
+    fields.update(
+        {
+            "itime": "1700000000",
+            "src_ip": "SRCIP_OPAQUE",
+            "dst_ip": "DSTIP_OPAQUE",
+            "host_ip": "HOSTIP_OPAQUE",
+            "src_port": "51515",
+            "dst_port": "443",
+            "net_proto": "6",
+            "net_sessionid": "SESSION_REPEATED",
+            "loguid": f"LOGUID_OPAQUE_{record_number}",
+            "event_action": "accept",
+            "event_subtype": "synthetic",
+            "event_type": "traffic",
+        }
+    )
+    if overrides:
+        fields.update(overrides)
+    return normalize_fortigate_record(
+        SourceRecord(
+            source_type=FORTIGATE_SOURCE_TYPE,
+            record_number=record_number,
+            fields=fields,
+        )
+    )
+
+
+@dataclass(frozen=True)
+class SyntheticRule:
+    """A test-only record-level rule used to exercise the 1.4C engine."""
+
+    metadata: RuleMetadata
+    matches: bool = True
+
+    def evaluate(self, event):  # type: ignore[no-untyped-def]
+        del event
+        if not self.matches:
+            return None
+        return RuleEvaluation(
+            reason_code=self.metadata.reason_code,
+            summary="A synthetic source observation is present.",
+            evidence_paths=("event.subtype_source",),
+            uncertainties=("Synthetic rules do not establish attack truth.",),
+        )
+
+
+def build_synthetic_rule(rule_id: str, *, matches: bool = True) -> SyntheticRule:
+    return SyntheticRule(
+        metadata=RuleMetadata(
+            rule_id=rule_id,
+            version="1.0",
+            name="Synthetic source observation",
+            description="A test-only source observation without an attack claim.",
+            category="SOURCE_PRODUCT_OBSERVATION",
+            severity="INFORMATIONAL",
+            supported_source_types=("fortigate",),
+            required_paths=("event.subtype_source",),
+            evidence_paths=("event.subtype_source",),
+            reason_code="SYNTHETIC_SOURCE_OBSERVATION",
+            security_rationale="Exercises deterministic evidence handling in tests.",
+            false_positive_scenarios=("Synthetic input can model benign activity.",),
+            limitations=("This test-only rule does not establish an attack.",),
+        ),
+        matches=matches,
+    )
+
+
+def write_normalized_jsonl(path: Path, events: tuple) -> None:  # type: ignore[type-arg]
+    path.write_text(
+        "".join(
+            json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
+            for event in events
+        ),
+        encoding="utf-8",
     )
 
 
@@ -471,3 +565,168 @@ def documented_registry_catalog(document: str) -> dict[str, tuple[str, ...]]:
             continue
         rows[cells[0]] = cells[1:]
     return rows
+
+
+class DetectionInputAndEngineTests(unittest.TestCase):
+    def test_input_reader_streams_valid_events_in_source_record_order(self) -> None:
+        first = build_detection_event(record_number=1)
+        second = build_detection_event(record_number=2)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "normalized.jsonl"
+            write_normalized_jsonl(path, (first, second))
+
+            records = iter_normalized_events(path)
+            self.assertEqual(next(records).source_record.record_number, 1)
+            self.assertEqual(next(records).source_record.record_number, 2)
+            with self.assertRaises(StopIteration):
+                next(records)
+
+    def test_input_reader_rejects_invalid_json_root_blank_and_schema(self) -> None:
+        event_payload = build_detection_event().to_dict()
+        invalid_cases = (
+            ("invalid-json", "{not JSON}\n", "INVALID_JSONL"),
+            ("root-array", "[]\n", "INVALID_EVENT_OBJECT"),
+            ("blank", "\n", "BLANK_JSONL_LINE"),
+            (
+                "unsupported-schema",
+                json.dumps({**event_payload, "schema_version": "2.0"}) + "\n",
+                "UNSUPPORTED_SCHEMA_VERSION",
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            for case_name, contents, expected_code in invalid_cases:
+                with self.subTest(case_name):
+                    path = Path(temporary_directory) / f"{case_name}.jsonl"
+                    path.write_text(contents, encoding="utf-8")
+                    with self.assertRaises(DetectionInputError) as caught:
+                        tuple(iter_normalized_events(path))
+                    self.assertEqual(caught.exception.code, expected_code)
+                    self.assertEqual(caught.exception.line_number, 1)
+
+    def test_input_reader_rejects_invalid_provenance_order_and_utf8(self) -> None:
+        first = build_detection_event(record_number=1)
+        second = build_detection_event(record_number=2)
+        invalid_provenance = first.to_dict()
+        invalid_provenance["provenance"] = []
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+
+            provenance_path = temporary_path / "invalid-provenance.jsonl"
+            provenance_path.write_text(
+                json.dumps(invalid_provenance) + "\n", encoding="utf-8"
+            )
+            with self.assertRaises(DetectionInputError) as caught:
+                tuple(iter_normalized_events(provenance_path))
+            self.assertEqual(caught.exception.code, "NORMALIZED_EVENT_VALIDATION_FAILED")
+            self.assertEqual(caught.exception.source_record_number, 1)
+
+            order_path = temporary_path / "invalid-order.jsonl"
+            write_normalized_jsonl(order_path, (second, first))
+            with self.assertRaises(DetectionInputError) as caught:
+                tuple(iter_normalized_events(order_path))
+            self.assertEqual(caught.exception.code, "RECORD_ORDER_INVALID")
+            self.assertEqual(caught.exception.line_number, 2)
+            self.assertEqual(caught.exception.source_record_number, 1)
+
+            utf8_path = temporary_path / "invalid-utf8.jsonl"
+            utf8_path.write_bytes(b"\xff\n")
+            with self.assertRaises(DetectionInputError) as caught:
+                tuple(iter_normalized_events(utf8_path))
+            self.assertEqual(caught.exception.code, "INVALID_INPUT_UTF8")
+
+    def test_engine_builds_deterministic_provenance_preserving_finding(self) -> None:
+        event = build_detection_event()
+        rule = build_synthetic_rule("fortigate.synthetic_observation")
+
+        findings = evaluate_event(event, (rule,))
+
+        self.assertEqual(findings, evaluate_event(event, (rule,)))
+        self.assertEqual(len(findings), 1)
+        finding = findings[0]
+        self.assertEqual(finding.rule.rule_id, rule.metadata.rule_id)
+        self.assertEqual(finding.reason_code, rule.metadata.reason_code)
+        self.assertEqual(finding.source_event.source_record_number, 1)
+        self.assertEqual(finding.source_event.source_record_id, "LOGUID_OPAQUE_1")
+        self.assertEqual(finding.time_basis, "NOT_USED")
+        self.assertEqual(len(finding.evidence), 1)
+        self.assertEqual(finding.evidence[0].canonical_path, "event.subtype_source")
+        self.assertEqual(finding.evidence[0].observed_value, "synthetic")
+        self.assertEqual(finding.evidence[0].source_fields, ("event_subtype",))
+        self.assertEqual(finding.evidence[0].mapping_operation, "COPIED")
+        self.assertEqual(finding.evidence[0].interpretation_status, "VERIFIED")
+
+    def test_engine_uses_stable_rule_order_and_rejects_unsorted_rules(self) -> None:
+        event = build_detection_event()
+        alpha_rule = build_synthetic_rule("fortigate.alpha_observation")
+        beta_rule = build_synthetic_rule("fortigate.beta_observation")
+
+        findings = evaluate_event(event, (alpha_rule, beta_rule))
+
+        self.assertEqual(
+            tuple(finding.rule.rule_id for finding in findings),
+            ("fortigate.alpha_observation", "fortigate.beta_observation"),
+        )
+        with self.assertRaises(DetectionEngineError) as caught:
+            evaluate_event(event, (beta_rule, alpha_rule))
+        self.assertEqual(caught.exception.code, "INVALID_RULE_REGISTRY")
+
+    def test_engine_keeps_repeated_sessions_independent_and_skips_unsupported_sources(self) -> None:
+        rule = build_synthetic_rule("fortigate.synthetic_observation")
+        first = build_detection_event(record_number=1)
+        second = build_detection_event(record_number=2)
+
+        first_finding = evaluate_event(first, (rule,))[0]
+        second_finding = evaluate_event(second, (rule,))[0]
+        self.assertEqual(first.session["identifier"], second.session["identifier"])
+        self.assertNotEqual(first_finding.finding_id, second_finding.finding_id)
+        self.assertEqual(first_finding.source_event.source_record_number, 1)
+        self.assertEqual(second_finding.source_event.source_record_number, 2)
+
+        unsupported_source_event = replace(
+            first,
+            source={**first.source, "adapter_type": "unsupported_source"},
+            source_record=SourceRecord(
+                source_type="unsupported_source",
+                record_number=first.source_record.record_number,
+                fields=first.source_record.fields,
+            ),
+        )
+        self.assertEqual(evaluate_event(unsupported_source_event, (rule,)), ())
+        self.assertEqual(evaluate_event(first, (build_synthetic_rule("fortigate.no_match", matches=False),)), ())
+        self.assertEqual(evaluate_event(first, ()), ())
+
+    def test_engine_rejects_mismatched_reason_codes_and_missing_evidence_provenance(self) -> None:
+        event = build_detection_event()
+        rule = build_synthetic_rule("fortigate.synthetic_observation")
+
+        @dataclass(frozen=True)
+        class WrongReasonRule:
+            metadata: RuleMetadata
+
+            def evaluate(self, input_event):  # type: ignore[no-untyped-def]
+                del input_event
+                return RuleEvaluation(
+                    reason_code="WRONG_REASON_CODE",
+                    summary="A synthetic source observation is present.",
+                    evidence_paths=("event.subtype_source",),
+                    uncertainties=("Synthetic rule only.",),
+                )
+
+        with self.assertRaises(DetectionEngineError) as caught:
+            evaluate_event(event, (WrongReasonRule(rule.metadata),))
+        self.assertEqual(caught.exception.code, "REASON_CODE_MISMATCH")
+
+        missing_provenance_event = replace(
+            event,
+            provenance=tuple(
+                item
+                for item in event.provenance
+                if item.canonical_path != "event.subtype_source"
+            ),
+        )
+        with self.assertRaises(DetectionEngineError) as caught:
+            evaluate_event(missing_provenance_event, (rule,))
+        self.assertEqual(caught.exception.code, "EVIDENCE_PROVENANCE_MISSING")

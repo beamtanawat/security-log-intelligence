@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
@@ -35,6 +37,16 @@ from detection.rules import (  # noqa: E402
 )
 from detection.engine import DetectionEngineError, evaluate_event  # noqa: E402
 from detection.input import DetectionInputError, iter_normalized_events  # noqa: E402
+from evaluate_detections import (  # noqa: E402
+    PROCESSED_DATA_DIRECTORY as DETECTION_PROCESSED_DATA_DIRECTORY,
+    DetectionRunError,
+    evaluate_detection_jsonl,
+    main as evaluate_detections_main,
+)
+from audit_detection_output import (  # noqa: E402
+    DetectionOutputAuditError,
+    audit_detection_jsonl,
+)
 from normalization.fortigate import normalize_fortigate_record  # noqa: E402
 from normalization.models import SourceRecord  # noqa: E402
 from parsers.fortigate import (  # noqa: E402
@@ -837,3 +849,260 @@ class DetectionInputAndEngineTests(unittest.TestCase):
         with self.assertRaises(DetectionEngineError) as caught:
             evaluate_event(missing_provenance_event, (rule,))
         self.assertEqual(caught.exception.code, "EVIDENCE_PROVENANCE_MISSING")
+
+
+class StreamingDetectionOutputTests(unittest.TestCase):
+    """Synthetic end-to-end tests for the Stage 1.4E output boundary."""
+
+    def setUp(self) -> None:
+        self._input_directory = tempfile.TemporaryDirectory()
+        self._output_directory = tempfile.TemporaryDirectory(
+            dir=DETECTION_PROCESSED_DATA_DIRECTORY
+        )
+        self.input_directory = Path(self._input_directory.name)
+        self.output_directory = Path(self._output_directory.name)
+
+    def tearDown(self) -> None:
+        self._input_directory.cleanup()
+        self._output_directory.cleanup()
+
+    def write_input(self, filename: str, events: tuple) -> Path:  # type: ignore[type-arg]
+        path = self.input_directory / filename
+        write_normalized_jsonl(path, events)
+        return path
+
+    @staticmethod
+    def json_lines(path: Path) -> list[dict[str, object]]:
+        return [
+            json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+        ]
+
+    def test_streaming_evaluation_preserves_order_counts_and_audits_output(self) -> None:
+        input_path = self.write_input(
+            "events.jsonl",
+            (
+                build_detection_event(
+                    record_number=1,
+                    overrides={
+                        "event_subtype": "anomaly",
+                        "threat_name": "source-observation",
+                    },
+                ),
+                build_detection_event(
+                    record_number=2, overrides={"threat_name": "source-observation"}
+                ),
+                build_detection_event(record_number=3),
+            ),
+        )
+        output_path = self.output_directory / "findings.jsonl"
+
+        summary = evaluate_detection_jsonl(input_path, output_path, ACTIVE_RULES)
+        output_records = self.json_lines(output_path)
+        audit = audit_detection_jsonl(output_path, summary)
+
+        self.assertEqual(summary.normalized_input_record_count, 3)
+        self.assertEqual(summary.evaluated_record_count, 3)
+        self.assertEqual(summary.invalid_input_count, 0)
+        self.assertEqual(summary.total_finding_count, 3)
+        self.assertEqual(summary.unique_matched_source_record_count, 2)
+        self.assertEqual(
+            [
+                (record["source_event"]["source_record_number"], record["rule"]["rule_id"])
+                for record in output_records
+            ],
+            [
+                (1, "fortigate.anomaly_subtype_observation"),
+                (1, "fortigate.source_threat_observation"),
+                (2, "fortigate.source_threat_observation"),
+            ],
+        )
+        self.assertEqual(audit.finding_count, summary.total_finding_count)
+        self.assertEqual(
+            dict(audit.findings_by_rule_id), dict(summary.findings_by_rule_id)
+        )
+        self.assertEqual(
+            audit.unique_matched_source_record_count,
+            summary.unique_matched_source_record_count,
+        )
+        self.assertEqual(audit_detection_jsonl(output_path).finding_count, 3)
+
+    def test_streaming_output_is_byte_for_byte_deterministic(self) -> None:
+        input_path = self.write_input(
+            "deterministic-events.jsonl",
+            (
+                build_detection_event(
+                    record_number=1,
+                    overrides={
+                        "event_subtype": "anomaly",
+                        "threat_name": "source-observation",
+                    },
+                ),
+                build_detection_event(
+                    record_number=2, overrides={"threat_name": "source-observation"}
+                ),
+            ),
+        )
+        first_output = self.output_directory / "first.jsonl"
+        second_output = self.output_directory / "second.jsonl"
+
+        evaluate_detection_jsonl(input_path, first_output, ACTIVE_RULES)
+        evaluate_detection_jsonl(input_path, second_output, ACTIVE_RULES)
+
+        self.assertEqual(first_output.read_bytes(), second_output.read_bytes())
+
+    def test_empty_input_produces_empty_auditable_output(self) -> None:
+        input_path = self.input_directory / "empty.jsonl"
+        input_path.write_text("", encoding="utf-8")
+        output_path = self.output_directory / "empty-findings.jsonl"
+
+        summary = evaluate_detection_jsonl(input_path, output_path, ACTIVE_RULES)
+        audit = audit_detection_jsonl(output_path, summary)
+
+        self.assertEqual(output_path.read_bytes(), b"")
+        self.assertEqual(summary.total_finding_count, 0)
+        self.assertEqual(summary.findings_by_rule_id, {})
+        self.assertEqual(audit.finding_count, 0)
+
+    def test_output_path_checks_and_input_failure_leave_no_partial_final_output(self) -> None:
+        input_path = self.write_input(
+            "valid.jsonl", (build_detection_event(record_number=1),)
+        )
+
+        with self.assertRaises(DetectionRunError) as outside_error:
+            evaluate_detection_jsonl(
+                input_path, self.input_directory / "outside.jsonl", ACTIVE_RULES
+            )
+        self.assertEqual(outside_error.exception.code, "OUTPUT_OUTSIDE_PROCESSED")
+
+        missing_parent_output = self.output_directory / "missing-parent" / "output.jsonl"
+        with self.assertRaises(DetectionRunError) as missing_parent_error:
+            evaluate_detection_jsonl(input_path, missing_parent_output, ACTIVE_RULES)
+        self.assertEqual(missing_parent_error.exception.code, "OUTPUT_PARENT_UNAVAILABLE")
+
+        same_path = self.output_directory / "same.jsonl"
+        write_normalized_jsonl(same_path, (build_detection_event(record_number=1),))
+        with self.assertRaises(DetectionRunError) as same_path_error:
+            evaluate_detection_jsonl(same_path, same_path, ACTIVE_RULES)
+        self.assertEqual(same_path_error.exception.code, "INPUT_OUTPUT_SAME")
+
+        existing_output = self.output_directory / "existing.jsonl"
+        existing_output.write_text("existing content", encoding="utf-8")
+        with self.assertRaises(DetectionRunError) as existing_error:
+            evaluate_detection_jsonl(input_path, existing_output, ACTIVE_RULES)
+        self.assertEqual(existing_error.exception.code, "OUTPUT_EXISTS")
+        self.assertEqual(existing_output.read_text(encoding="utf-8"), "existing content")
+
+        invalid_input = self.input_directory / "invalid.jsonl"
+        invalid_input.write_text(
+            json.dumps(build_detection_event(record_number=1).to_dict()) + "\n{not JSON}\n",
+            encoding="utf-8",
+        )
+        failed_output = self.output_directory / "failed.jsonl"
+        with self.assertRaises(DetectionInputError):
+            evaluate_detection_jsonl(invalid_input, failed_output, ACTIVE_RULES)
+        self.assertFalse(failed_output.exists())
+        self.assertEqual(
+            list(self.output_directory.glob(f".{failed_output.stem}.*.tmp")), []
+        )
+
+    def test_audit_rejects_tampered_contract_evidence_provenance_metadata_order_and_count(self) -> None:
+        events = (
+            build_detection_event(
+                record_number=1,
+                overrides={
+                    "event_subtype": "anomaly",
+                    "threat_name": "source-observation",
+                },
+            ),
+            build_detection_event(
+                record_number=2, overrides={"threat_name": "source-observation"}
+            ),
+        )
+        input_path = self.write_input("tamper-events.jsonl", events)
+
+        for case_name in (
+            "finding-id",
+            "evidence-value",
+            "evidence-provenance",
+            "rule-metadata",
+            "order",
+            "count",
+            "prohibited-field",
+        ):
+            with self.subTest(case_name):
+                output_path = self.output_directory / f"tampered-{case_name}.jsonl"
+                summary = evaluate_detection_jsonl(input_path, output_path, ACTIVE_RULES)
+                output_records = self.json_lines(output_path)
+                if case_name == "finding-id":
+                    output_records[0]["finding_id"] = "0" * 64
+                elif case_name == "evidence-value":
+                    output_records[0]["evidence"][0]["observed_value"] = "tampered"
+                elif case_name == "evidence-provenance":
+                    output_records[0]["evidence"][0]["source_fields"] = ["wrong_field"]
+                elif case_name == "rule-metadata":
+                    output_records[0]["rule"]["name"] = "tampered"
+                elif case_name == "order":
+                    output_records[0], output_records[1] = output_records[1], output_records[0]
+                elif case_name == "count":
+                    output_records.pop()
+                else:
+                    output_records[0]["risk_score"] = 1
+                output_path.write_text(
+                    "".join(
+                        json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+                        for record in output_records
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(DetectionOutputAuditError):
+                    audit_detection_jsonl(output_path, summary)
+
+    def test_run_summary_is_bounded_and_cli_errors_remain_concise(self) -> None:
+        input_path = self.write_input(
+            "many-findings.jsonl",
+            tuple(
+                build_detection_event(
+                    record_number=record_number,
+                    overrides={"threat_name": "source-observation"},
+                )
+                for record_number in range(1, 8)
+            ),
+        )
+        output_path = self.output_directory / "many-findings.jsonl"
+
+        summary = evaluate_detection_jsonl(input_path, output_path, ACTIVE_RULES)
+        samples = summary.sample_findings_by_rule[
+            "fortigate.source_threat_observation"
+        ]
+        self.assertEqual(summary.total_finding_count, 7)
+        self.assertEqual(len(samples), 5)
+        self.assertEqual(
+            [sample.source_record_number for sample in samples], [1, 2, 3, 4, 5]
+        )
+
+        stderr = io.StringIO()
+        missing_output = self.output_directory / "cli-failure.jsonl"
+        with redirect_stderr(stderr):
+            exit_code = evaluate_detections_main(
+                [
+                    "--input",
+                    str(self.input_directory / "missing.jsonl"),
+                    "--output",
+                    str(missing_output),
+                ]
+            )
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(missing_output.exists())
+        self.assertEqual(stderr.getvalue(), "detection failed: Normalized JSON Lines input does not exist.\n")
+
+        cli_output = self.output_directory / "cli-success.jsonl"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = evaluate_detections_main(
+                ["--input", str(input_path), "--output", str(cli_output)]
+            )
+        self.assertEqual(exit_code, 0)
+        printed_summary = json.loads(stdout.getvalue())
+        self.assertEqual(printed_summary["total_finding_count"], 7)
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)

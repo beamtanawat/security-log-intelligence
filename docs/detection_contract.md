@@ -109,3 +109,33 @@ This contract creates no rule registry, rule conditions, rule engine, normalized
 JSONL reader, CLI, detection output, audit, real-data evaluation, threshold,
 time-window logic, incident, risk score, ML, API, database, dashboard, or
 deployment behavior.
+
+## Stage 1.4E CLI and output-audit behavior
+
+The Stage 1.4E command evaluates only the reviewed built-in Python rule registry
+against serialized `NormalizedSecurityEvent` v1.0 JSON Lines records:
+
+```powershell
+python .\src\evaluate_detections.py `
+  --input .\data\processed\stage_1_3f_normalized_events.jsonl `
+  --output .\data\processed\stage_1_4f_detection_findings.jsonl
+```
+
+The command streams one normalized event and that event's rule findings at a time.
+It writes compact UTF-8 JSON Lines using sorted keys and `\n` line endings, then
+publishes the requested final output only after the complete run succeeds. The
+output must be a new path under `data/processed/`, must differ from the input, and
+is never overwritten. A failure removes only the uniquely named temporary file
+created for that run.
+
+Standard output is exactly one compact, bounded `DetectionRunSummary` JSON object;
+errors are concise and written to standard error. The CLI accepts no dynamic rules,
+configuration files, thresholds, time windows, or output-overwrite option.
+
+`audit_detection_jsonl()` streams a finding output. With the corresponding
+`DetectionRunSummary`, it also streams the referenced normalized input to verify
+deterministic finding IDs, ordering, active-rule metadata, reason codes, exact
+canonical evidence, copied provenance, source references, bounded summaries, and
+prohibited security-decision fields. This audit validates transparent rule matches;
+it does not confirm attacks, incidents, maliciousness, benignness, confidence, or
+risk.

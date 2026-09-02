@@ -1,14 +1,13 @@
-"""Reviewed inactive rule metadata for Stage 1.4B.
+"""Reviewed FortiGate source-observation rules for Stage 1.4D.
 
-This module defines the Python rule interface and the two reviewed metadata
-entries. Both entries are intentionally inactive placeholders: they always
-return ``None`` and cannot emit a finding until the separately approved Stage
-1.4D rule-condition checkpoint.
+The two active rules evaluate one normalized event at a time. They use only
+approved canonical values and surface source-product observations; neither rule
+confirms an attack, compromise, incident, maliciousness, or benignness.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -45,7 +44,7 @@ class DetectionRule(Protocol):
 
 @dataclass(frozen=True)
 class InactiveRulePlaceholder:
-    """A reviewed rule definition that cannot produce a finding yet."""
+    """A no-match rule definition retained for registry validation tests."""
 
     metadata: RuleMetadata
 
@@ -54,7 +53,7 @@ class InactiveRulePlaceholder:
             raise RuleRegistryError("metadata must be a RuleMetadata")
 
     def evaluate(self, event: NormalizedSecurityEvent) -> None:
-        """Return no match until Stage 1.4D activates reviewed conditions."""
+        """Return no match for a deliberately inactive test-only rule."""
 
         del event
         return None
@@ -176,15 +175,88 @@ _SOURCE_THREAT_METADATA = RuleMetadata(
 )
 
 
-# Metadata entries are fixed in ascending rule-ID order. They are inactive until
-# Stage 1.4D because their placeholders always return None.
-BUILT_IN_RULES: tuple[InactiveRulePlaceholder, ...] = (
-    InactiveRulePlaceholder(_ANOMALY_SUBTYPE_METADATA),
-    InactiveRulePlaceholder(_SOURCE_THREAT_METADATA),
+def _is_populated(value: object) -> bool:
+    """Return whether a canonical source-observation value is present."""
+
+    return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+def _canonical_value(event: NormalizedSecurityEvent, path: str) -> object | None:
+    """Return one canonical value, or ``None`` when the declared path is absent."""
+
+    section_name, *path_parts = path.split(".")
+    if not path_parts or not hasattr(event, section_name):
+        return None
+    value: object = getattr(event, section_name)
+    for path_part in path_parts:
+        if not isinstance(value, Mapping) or path_part not in value:
+            return None
+        value = value[path_part]
+    return value
+
+
+def _populated_evidence_paths(
+    event: NormalizedSecurityEvent, paths: Sequence[str]
+) -> tuple[str, ...]:
+    """Return populated declared paths in their already-canonical path order."""
+
+    return tuple(path for path in paths if _is_populated(_canonical_value(event, path)))
+
+
+def _is_fortigate_event(event: NormalizedSecurityEvent) -> bool:
+    return event.source.get("adapter_type") == "fortigate"
+
+
+@dataclass(frozen=True)
+class FortiGateAnomalySubtypeObservationRule:
+    """Surface the exact FortiGate ``anomaly`` source subtype for review."""
+
+    metadata: RuleMetadata = _ANOMALY_SUBTYPE_METADATA
+
+    def evaluate(self, event: NormalizedSecurityEvent) -> RuleEvaluation | None:
+        if not _is_fortigate_event(event):
+            return None
+        if event.event.get("subtype_source") != "anomaly":
+            return None
+        return RuleEvaluation(
+            reason_code=self.metadata.reason_code,
+            summary="FortiGate reported the source subtype 'anomaly'.",
+            evidence_paths=_populated_evidence_paths(
+                event, self.metadata.evidence_paths
+            ),
+            uncertainties=self.metadata.limitations,
+        )
+
+
+@dataclass(frozen=True)
+class FortiGateSourceThreatObservationRule:
+    """Surface populated FortiGate threat-observation values for review."""
+
+    metadata: RuleMetadata = _SOURCE_THREAT_METADATA
+
+    def evaluate(self, event: NormalizedSecurityEvent) -> RuleEvaluation | None:
+        if not _is_fortigate_event(event):
+            return None
+        evidence_paths = _populated_evidence_paths(event, self.metadata.evidence_paths)
+        if not evidence_paths:
+            return None
+        return RuleEvaluation(
+            reason_code=self.metadata.reason_code,
+            summary="FortiGate reported populated source threat-observation values.",
+            evidence_paths=evidence_paths,
+            uncertainties=self.metadata.limitations,
+        )
+
+
+# Active definitions are fixed in ascending rule-ID order. The engine remains the
+# only component that constructs findings from their record-level evaluations.
+BUILT_IN_RULES: tuple[DetectionRule, ...] = (
+    FortiGateAnomalySubtypeObservationRule(),
+    FortiGateSourceThreatObservationRule(),
 )
 
-# There is no active production registry at Stage 1.4B. Keeping this empty avoids
-# accidental finding creation before the reviewed Stage 1.4D conditions exist.
-ACTIVE_RULES: tuple[DetectionRule, ...] = ()
+# The active registry is explicit, immutable, and contains only the two reviewed
+# informational source-observation rules.
+ACTIVE_RULES: tuple[DetectionRule, ...] = BUILT_IN_RULES
 
-validate_rule_registry(BUILT_IN_RULES)
+validate_rule_registry(ACTIVE_RULES)

@@ -434,14 +434,14 @@ class DetectionContractTests(unittest.TestCase):
 
 
 class RuleRegistryTests(unittest.TestCase):
-    def test_builtin_registry_is_ordered_unique_and_inactive(self) -> None:
+    def test_builtin_registry_is_ordered_unique_and_active(self) -> None:
         rule_ids = tuple(rule.metadata.rule_id for rule in BUILT_IN_RULES)
 
         self.assertEqual(rule_ids, tuple(sorted(rule_ids)))
         self.assertEqual(len(rule_ids), len(set(rule_ids)))
-        self.assertEqual(ACTIVE_RULES, ())
+        self.assertEqual(ACTIVE_RULES, BUILT_IN_RULES)
         self.assertTrue(
-            all(rule.evaluate(None) is None for rule in BUILT_IN_RULES)  # type: ignore[arg-type]
+            all(not isinstance(rule, InactiveRulePlaceholder) for rule in BUILT_IN_RULES)
         )
 
     def test_registry_rejects_duplicate_and_unsorted_rule_ids(self) -> None:
@@ -537,7 +537,7 @@ class RuleRegistryTests(unittest.TestCase):
                 "; ".join(rule.metadata.required_paths),
                 "; ".join(rule.metadata.evidence_paths),
                 rule.metadata.reason_code,
-                "No",
+                "Yes",
             )
             for rule in BUILT_IN_RULES
         }
@@ -545,6 +545,113 @@ class RuleRegistryTests(unittest.TestCase):
         self.assertEqual(rows, expected_rows)
         self.assertEqual(document.count("| Review item | Approved answer |"), 2)
         self.assertIn("Rule Match != Confirmed Attack", document)
+
+
+class InitialSourceObservationRuleTests(unittest.TestCase):
+    def rule(self, rule_id: str):  # type: ignore[no-untyped-def]
+        return next(rule for rule in ACTIVE_RULES if rule.metadata.rule_id == rule_id)
+
+    def test_source_threat_observation_matches_only_populated_threat_leaves(self) -> None:
+        rule = self.rule("fortigate.source_threat_observation")
+
+        self.assertIsNone(rule.evaluate(build_detection_event()))
+        partial_event = build_detection_event(
+            overrides={
+                "threat_action": "blocked",
+                "threat_id": "THREAT_IDENTIFIER_OPAQUE",
+                "threat_name": "source-observation",
+            }
+        )
+        evaluation = rule.evaluate(partial_event)
+
+        self.assertIsNotNone(evaluation)
+        assert evaluation is not None
+        self.assertEqual(
+            evaluation.evidence_paths,
+            (
+                "threat_observations.action_source",
+                "threat_observations.id_raw",
+                "threat_observations.name_source",
+            ),
+        )
+        self.assertEqual(
+            evaluation.reason_code, "SOURCE_THREAT_OBSERVATION_PRESENT"
+        )
+
+    def test_anomaly_subtype_condition_is_exact_case_sensitive_and_handles_missing_context(self) -> None:
+        rule = self.rule("fortigate.anomaly_subtype_observation")
+
+        self.assertIsNone(rule.evaluate(build_detection_event()))
+        self.assertIsNone(
+            rule.evaluate(build_detection_event(overrides={"event_subtype": "Anomaly"}))
+        )
+        self.assertIsNone(
+            rule.evaluate(build_detection_event(overrides={"event_subtype": "unknown"}))
+        )
+
+        anomaly_event = build_detection_event(
+            overrides={"event_subtype": "anomaly", "event_action": "", "event_type": ""}
+        )
+        evaluation = rule.evaluate(anomaly_event)
+
+        self.assertIsNotNone(evaluation)
+        assert evaluation is not None
+        self.assertEqual(evaluation.evidence_paths, ("event.subtype_source",))
+        self.assertEqual(
+            evaluation.reason_code, "SOURCE_ANOMALY_SUBTYPE_OBSERVED"
+        )
+
+    def test_both_rules_emit_independent_informational_findings_in_order(self) -> None:
+        event = build_detection_event(
+            overrides={"event_subtype": "anomaly", "threat_name": "source-observation"}
+        )
+
+        findings = evaluate_event(event, ACTIVE_RULES)
+
+        self.assertEqual(
+            tuple(finding.rule.rule_id for finding in findings),
+            (
+                "fortigate.anomaly_subtype_observation",
+                "fortigate.source_threat_observation",
+            ),
+        )
+        self.assertTrue(all(finding.rule.severity == "INFORMATIONAL" for finding in findings))
+        self.assertEqual(
+            tuple(finding.reason_code for finding in findings),
+            (
+                "SOURCE_ANOMALY_SUBTYPE_OBSERVED",
+                "SOURCE_THREAT_OBSERVATION_PRESENT",
+            ),
+        )
+        self.assertEqual(findings, evaluate_event(event, ACTIVE_RULES))
+        expected_false_positive_notes = {
+            rule.metadata.rule_id: rule.metadata.false_positive_scenarios[0]
+            for rule in ACTIVE_RULES
+        }
+        self.assertEqual(
+            {
+                finding.rule.rule_id: finding.false_positive_note
+                for finding in findings
+            },
+            expected_false_positive_notes,
+        )
+
+    def test_rules_skip_unsupported_source_types(self) -> None:
+        event = build_detection_event(
+            overrides={"event_subtype": "anomaly", "threat_name": "source-observation"}
+        )
+        unsupported_source_event = replace(
+            event,
+            source={**event.source, "adapter_type": "unsupported_source"},
+            source_record=SourceRecord(
+                source_type="unsupported_source",
+                record_number=event.source_record.record_number,
+                fields=event.source_record.fields,
+            ),
+        )
+
+        self.assertTrue(all(rule.evaluate(unsupported_source_event) is None for rule in ACTIVE_RULES))
+        self.assertEqual(evaluate_event(unsupported_source_event, ACTIVE_RULES), ())
 
 
 def documented_registry_catalog(document: str) -> dict[str, tuple[str, ...]]:

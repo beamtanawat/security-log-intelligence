@@ -1,25 +1,25 @@
 # Initial Rule Specifications
 
-## Stage 1.4B Status
+## Stage 1.4D Status
 
 This document records the two reviewed FortiGate source-observation rule
 specifications. They are present as immutable, lexicographically ordered
-metadata in `src/detection/rules.py`, but both are **inactive placeholders** in
-this checkpoint. They always return no match and emit no findings until a
-separately approved Stage 1.4D implementation.
+metadata and active record-level evaluators in `src/detection/rules.py`.
+The Stage 1.4C engine constructs a finding only when one of these exact
+conditions matches a normalized FortiGate event.
 
-Rule Match != Confirmed Attack. A future match will only state that an explicit
+Rule Match != Confirmed Attack. A match states only that an explicit
 deterministic condition was satisfied; it will not confirm an attack,
 compromise, incident, maliciousness, or benignness.
 
 ## Registry Catalog
 
-| Rule ID | Version | Category | Rule severity | Supported sources | Required paths | Evidence paths | Reason code | Active in 1.4B |
+| Rule ID | Version | Category | Rule severity | Supported sources | Required paths | Evidence paths | Reason code | Active in 1.4D |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `fortigate.anomaly_subtype_observation` | `1.0` | `SOURCE_PRODUCT_OBSERVATION` | `INFORMATIONAL` | `fortigate` | `event.subtype_source` | `event.action_source`; `event.severity_source`; `event.subtype_source`; `event.type_source` | `SOURCE_ANOMALY_SUBTYPE_OBSERVED` | No |
-| `fortigate.source_threat_observation` | `1.0` | `SOURCE_PRODUCT_OBSERVATION` | `INFORMATIONAL` | `fortigate` | `threat_observations` | `threat_observations.action_source`; `threat_observations.id_raw`; `threat_observations.name_source`; `threat_observations.pattern_source`; `threat_observations.reference_source`; `threat_observations.severity_source`; `threat_observations.type_source` | `SOURCE_THREAT_OBSERVATION_PRESENT` | No |
+| `fortigate.anomaly_subtype_observation` | `1.0` | `SOURCE_PRODUCT_OBSERVATION` | `INFORMATIONAL` | `fortigate` | `event.subtype_source` | `event.action_source`; `event.severity_source`; `event.subtype_source`; `event.type_source` | `SOURCE_ANOMALY_SUBTYPE_OBSERVED` | Yes |
+| `fortigate.source_threat_observation` | `1.0` | `SOURCE_PRODUCT_OBSERVATION` | `INFORMATIONAL` | `fortigate` | `threat_observations` | `threat_observations.action_source`; `threat_observations.id_raw`; `threat_observations.name_source`; `threat_observations.pattern_source`; `threat_observations.reference_source`; `threat_observations.severity_source`; `threat_observations.type_source` | `SOURCE_THREAT_OBSERVATION_PRESENT` | Yes |
 
-The threat-observation paths are candidates: a future rule will safely test that
+The threat-observation paths are candidates: the active rule safely tests that
 at least one is populated. The catalog does not state that every listed path
 must be non-null.
 
@@ -38,8 +38,8 @@ must be non-null.
 | Threshold | None. |
 | Time semantics | `NOT_USED`. |
 | Traceability | Source record number and opaque source record ID link a future finding to its normalized event. |
-| Synthetic tests | Metadata, registry ordering, documentation reconciliation, and inactive no-match behavior are covered in 1.4B. Condition tests wait for 1.4D. |
-| Real-data count | Not measured in 1.4B. |
+| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, and deterministic findings are covered through 1.4D. |
+| Real-data count | Not measured in 1.4D. |
 | Limitations | A source-product anomaly subtype is not proof of maliciousness, compromise, or attack. |
 
 ## Quality Review — FortiGate Source Threat Observation
@@ -57,8 +57,8 @@ must be non-null.
 | Threshold | None. |
 | Time semantics | `NOT_USED`. |
 | Traceability | Source record number and opaque source record ID link a future finding to its normalized event. |
-| Synthetic tests | Metadata, registry ordering, documentation reconciliation, and inactive no-match behavior are covered in 1.4B. Condition tests wait for 1.4D. |
-| Real-data count | Not measured in 1.4B. |
+| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, and deterministic findings are covered through 1.4D. |
+| Real-data count | Not measured in 1.4D. |
 | Limitations | Threat values are source-product observations, not ground-truth attack labels. |
 
 ## Boundaries
@@ -70,5 +70,6 @@ must be non-null.
   correlation.
 - Sanitized identifiers remain opaque. No identifier is parsed, validated,
   enriched, or used by these metadata definitions.
-- The metadata does not create a rule registry with active evaluators, a detection
-  engine, JSON Lines reader, CLI, output, audit, incident, score, or label.
+- These two rules use the existing record-level engine only. They add no CLI,
+  output writer, audit, incident, score, attack label, threshold, time window, or
+  stateful correlation.

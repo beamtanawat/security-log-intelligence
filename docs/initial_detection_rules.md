@@ -1,12 +1,11 @@
 # Initial Rule Specifications
 
-## Stage 1.4D Status
+## Final Stage 1.4 Rule Status
 
 This document records the two reviewed FortiGate source-observation rule
-specifications. They are present as immutable, lexicographically ordered
-metadata and active record-level evaluators in `src/detection/rules.py`.
-The Stage 1.4C engine constructs a finding only when one of these exact
-conditions matches a normalized FortiGate event.
+specifications. They are immutable, lexicographically ordered metadata and active
+record-level evaluators in `src/detection/rules.py`. The engine constructs a finding
+only when one of these exact conditions matches a normalized FortiGate event.
 
 Rule Match != Confirmed Attack. A match states only that an explicit
 deterministic condition was satisfied; it will not confirm an attack,
@@ -38,9 +37,11 @@ must be non-null.
 | Threshold | None. |
 | Time semantics | `NOT_USED`. |
 | Traceability | Source record number and opaque source record ID link a future finding to its normalized event. |
-| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, and deterministic findings are covered through 1.4D. |
-| Real-data count | Not measured in 1.4D. |
+| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, deterministic findings, streaming output, and audit rejection checks are covered by the Stage 1.4 suite. |
+| Real-data count | 18 findings in the validated Stage 1.4F audit. |
 | Limitations | A source-product anomaly subtype is not proof of maliciousness, compromise, or attack. |
+| False-negative limitation | Only the exact case-sensitive source value `anomaly` matches. Missing or different source values emit no finding and a non-match does not establish absence of security-relevant activity. |
+| Source-product limitation | FortiGate's category is preserved as supplied; its underlying vendor logic is not independently verified by this rule. |
 
 ## Quality Review — FortiGate Source Threat Observation
 
@@ -57,9 +58,27 @@ must be non-null.
 | Threshold | None. |
 | Time semantics | `NOT_USED`. |
 | Traceability | Source record number and opaque source record ID link a future finding to its normalized event. |
-| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, and deterministic findings are covered through 1.4D. |
-| Real-data count | Not measured in 1.4D. |
+| Synthetic tests | Metadata, registry ordering, exact condition behavior, evidence/provenance, documentation reconciliation, deterministic findings, streaming output, and audit rejection checks are covered by the Stage 1.4 suite. |
+| Real-data count | 25 findings in the validated Stage 1.4F audit. |
 | Limitations | Threat values are source-product observations, not ground-truth attack labels. |
+| False-negative limitation | Only populated approved `threat_observations.*` leaves match. Missing or unpopulated leaves emit no finding and a non-match does not label a record benign. |
+| Source-product limitation | The rule preserves FortiGate observations and does not independently validate vendor classification, scanning, policy, or threat semantics. |
+
+## Validated Real-Data Reconciliation
+
+The Stage 1.4F audit evaluated all 100,000 normalized records with no invalid input
+records. The two rules produced 43 `INFORMATIONAL` findings from 25 source records:
+
+| Rule ID | Validated findings | What the count means | What it does not mean |
+| --- | ---: | --- | --- |
+| `fortigate.anomaly_subtype_observation` | 18 | Exact source subtype `anomaly` was observed. | Confirmed attacks, malicious events, or incidents. |
+| `fortigate.source_threat_observation` | 25 | At least one approved source threat-observation leaf was populated. | Ground-truth threats, confirmed attacks, or benign/non-benign labels. |
+| **Total findings** | **43** | Separate record-level rule matches; one source record may match both rules. | A count of unique incidents or compromises. |
+
+The finding audit verified source references and copied Stage 1.3 provenance. The
+two deterministic evaluation runs produced byte-identical finding output for the
+same normalized input and registry. Determinism is reproducible rule-engine
+behavior, not a guarantee of semantic correctness or ground truth.
 
 ## Boundaries
 
@@ -70,6 +89,6 @@ must be non-null.
   correlation.
 - Sanitized identifiers remain opaque. No identifier is parsed, validated,
   enriched, or used by these metadata definitions.
-- These two rules use the existing record-level engine only. They add no CLI,
-  output writer, audit, incident, score, attack label, threshold, time window, or
-  stateful correlation.
+- The rules use the existing record-level engine, CLI, and audit; the rules themselves
+  add no incident, score, attack label, threshold, time window, or stateful
+  correlation.

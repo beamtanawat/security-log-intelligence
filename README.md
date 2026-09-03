@@ -55,6 +55,26 @@ classification, scoring, machine learning, APIs, or deployment. See
 [`docs/fortigate_normalization_mapping.md`](docs/fortigate_normalization_mapping.md),
 and [`docs/stage_1_3_normalization_findings.md`](docs/stage_1_3_normalization_findings.md).
 
+### Stage 1.4 — Rule-Based Detection Foundation — Complete
+
+Stage 1.4 adds a small, deterministic detection path on top of normalized events:
+an immutable rule contract and registry, record-level streaming evaluation,
+provenance-preserving findings, safe JSON Lines publication, and a streaming output
+audit. The two initial FortiGate-only rules surface source-product threat observations
+and the exact source subtype `anomaly`; they do not confirm attacks or create
+incidents.
+
+The validated audit evaluated all 100,000 normalized records, produced 43
+informational findings from 25 source records, and verified deterministic output,
+evidence, provenance, input integrity, and Git safety. These findings are
+observations for review, not attack counts, maliciousness labels, confidence scores,
+or risk scores. See [`docs/detection_contract.md`](docs/detection_contract.md),
+[`docs/initial_detection_rules.md`](docs/initial_detection_rules.md), and
+[`docs/stage_1_4_detection_findings.md`](docs/stage_1_4_detection_findings.md).
+
+Stage 1.4 does not add thresholds, time windows, correlation, incidents, machine
+learning, storage, APIs, or a dashboard. Any next stage remains separately planned.
+
 ## Current Dataset
 
 The initial dataset is:

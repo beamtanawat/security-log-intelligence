@@ -2,11 +2,10 @@
 
 ## Purpose
 
-This document defines the minimal Stage 1.4 contract for transparent,
-deterministic, record-level rule findings. It consumes the completed Stage 1.3
-`NormalizedSecurityEvent` v1.0 contract; it does not parse raw CSV, change
-normalization, evaluate rules, read JSON Lines, write output, or make a security
-decision.
+This document defines the final Stage 1.4 contract for transparent,
+deterministic, record-level rule findings. The implementation consumes the completed
+Stage 1.3 `NormalizedSecurityEvent` v1.0 contract. It never parses raw CSV for rule
+evaluation, changes normalization, or makes a security decision.
 
 ## Terminology
 
@@ -33,9 +32,9 @@ Allowed v1 values are:
 - Rule severity: `INFORMATIONAL`, `LOW`, `MEDIUM`, or `HIGH`
 - Initial finding time basis: `NOT_USED`
 
-The contract intentionally has no enabled flag, threshold, window, confidence,
-risk score, incident field, or attack/malicious/benign decision field. A future
-registry will determine which reviewed rules are active.
+The contract intentionally has no threshold, window, confidence, risk score,
+incident field, or attack/malicious/benign decision field. The explicit immutable
+built-in registry determines which reviewed rules are active.
 
 ## Finding and evidence
 
@@ -103,12 +102,16 @@ raw source record.
 - Threat, application, event, and anomaly values remain source-product
   observations, not ground-truth attack labels.
 
-## Out of scope for this checkpoint
+## Final Stage 1.4 scope
 
-This contract creates no rule registry, rule conditions, rule engine, normalized
-JSONL reader, CLI, detection output, audit, real-data evaluation, threshold,
-time-window logic, incident, risk score, ML, API, database, dashboard, or
-deployment behavior.
+The completed Stage 1.4 implementation supplies an immutable built-in registry,
+two FortiGate source-observation rules, a strict normalized-JSONL reader, a
+record-level engine, a safe streaming CLI, and a streaming output audit. Those
+components implement this contract without changing its v1.0 field meanings.
+
+Stage 1.4 remains deliberately limited: it adds no threshold, time-window or
+stateful rule, correlation, incident, risk score, ML, API, database, dashboard, or
+deployment behavior. It does not change the Stage 1.3 normalization contract.
 
 ## Stage 1.4E CLI and output-audit behavior
 
@@ -139,3 +142,18 @@ canonical evidence, copied provenance, source references, bounded summaries, and
 prohibited security-decision fields. This audit validates transparent rule matches;
 it does not confirm attacks, incidents, maliciousness, benignness, confidence, or
 risk.
+
+## Validated Stage 1.4F behavior
+
+The approved real-data audit evaluated 100,000 normalized records with 0 invalid
+records. It produced 43 `INFORMATIONAL` findings from 25 source records: 18 matches
+for `fortigate.anomaly_subtype_observation` and 25 matches for
+`fortigate.source_threat_observation`. The primary and separate deterministic runs
+had identical finding SHA-256 values, and the streaming audit reconciled finding
+identity, ordering, rule metadata, evidence, provenance, and bounded summaries.
+
+These measurements show reproducible behavior for the fixed normalized input and
+approved registry. They do not establish semantic correctness, attack truth,
+detection accuracy, precision, recall, false-positive rate, or false-negative rate.
+The detailed aggregate evidence and interpretation limits are in
+[`stage_1_4_detection_findings.md`](stage_1_4_detection_findings.md).

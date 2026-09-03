@@ -1,14 +1,13 @@
-# Stage 1.4F Rule-Based Detection Findings
+# Stage 1.4 Rule-Based Detection Findings
 
 ## Checkpoint Status
 
-**PASS — NEEDS APPROVAL for a local commit.** The retained local validation
-summary reports a successful Stage 1.4F run. The primary findings were subsequently
-recovered after accidental deletion, matched to the retained SHA-256, and fully
-re-audited using the repaired PowerShell audit bridge. Measured results and the
-distinction between the original validation and recovery checks are recorded below.
-
-Stage 1.4F is not yet committed. Stage 1.4G has not started.
+**Stage 1.4F complete. Stage 1.4G PASS — NEEDS APPROVAL for its local commit.** The
+retained local validation summary reports a successful Stage 1.4F run. The primary
+findings were subsequently recovered after accidental deletion, matched to the
+retained SHA-256, and fully re-audited using the repaired PowerShell audit bridge.
+Measured results and the distinction between the original validation and recovery
+checks are recorded below.
 
 Rule Match != Confirmed Attack.
 
@@ -192,8 +191,42 @@ processed output remains. Raw and processed data are neither staged nor tracked;
 
 ## Validator Verdict
 
-**PASS — NEEDS APPROVAL.** The retained local validation and recovery checks agree
-on input integrity, all 100,000 evaluated records, finding counts, provenance,
-determinism, tests, and Git safety. Findings are source observations only, not
-confirmed attacks. The checkpoint requires explicit approval before its local
-commit; no commit, push, or Stage 1.4G work is part of this recovery.
+**Stage 1.4F PASS.** The retained local validation and recovery checks agree on input
+integrity, all 100,000 evaluated records, finding counts, provenance, determinism,
+tests, and Git safety. Findings are source observations only, not confirmed attacks.
+
+## Stage 1.4G Reconciliation and Readiness
+
+The final documentation review reconciles the implementation and its evidence:
+
+```text
+NormalizedSecurityEvent v1.0
+        ↓
+Immutable built-in rule registry
+        ↓
+Record-level streaming evaluation
+        ↓
+DetectionFinding v1.0 with exact evidence and provenance
+        ↓
+Safe deterministic JSON Lines publication
+        ↓
+Streaming finding-output audit
+```
+
+The detection contract, rule catalog, active metadata, canonical evidence paths,
+reason codes, fixed `INFORMATIONAL` rule severity, tests, and Stage 1.4F measured
+counts are reconciled in the final documentation. Rule severity remains separate
+from source event severity and source threat severity.
+
+This final documentation gate passed, so the foundation is technically ready for
+Stage 1.4 closure. It is ready only as a transparent, deterministic source-observation
+baseline: not as a confirmed-attack detector, incident system, risk engine,
+performance benchmark, or general security conclusion. A later stage must be
+separately planned and approved.
+
+The contract details are in [`detection_contract.md`](detection_contract.md); the
+reviewed active-rule definitions are in
+[`initial_detection_rules.md`](initial_detection_rules.md). Their input boundary and
+provenance semantics remain those established by the Stage 1.3
+[`normalized_event_schema.md`](normalized_event_schema.md); Stage 1.4 does not
+redefine or modify them.

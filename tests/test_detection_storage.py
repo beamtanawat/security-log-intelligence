@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import replace
+from hashlib import sha256
+import json
 import sqlite3
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +23,12 @@ from storage.models import (  # noqa: E402
     StorageContractError,
     StorageImportSummary,
 )
+from storage import input as storage_input  # noqa: E402
+from storage.input import (  # noqa: E402
+    ApprovedArtifactIdentity,
+    StorageInputValidationError,
+    validate_detection_artifacts,
+)
 from storage.schema import (  # noqa: E402
     REQUIRED_INDEX_NAMES,
     STORAGE_METADATA_VALUES,
@@ -25,6 +36,17 @@ from storage.schema import (  # noqa: E402
     configure_connection,
     create_storage_schema,
 )
+from detection.models import (  # noqa: E402
+    ActiveRuleVersion,
+    DetectionEvidence,
+    DetectionFinding,
+    DetectionRunSummary,
+    FindingRuleReference,
+    FindingSample,
+    SourceEventReference,
+    build_finding_id,
+)
+from detection.rules import ACTIVE_RULES  # noqa: E402
 
 
 RUN_ID = "a" * 64
@@ -157,6 +179,143 @@ def insert_valid_evidence(connection: sqlite3.Connection) -> None:
             "COPIED",
             "VERIFIED",
         ),
+    )
+
+
+def build_stage_1_4_finding(
+    record_number: int,
+    *,
+    rule_index: int = 0,
+) -> DetectionFinding:
+    """Build a public-contract finding using one reviewed Stage 1.4 rule."""
+
+    metadata = ACTIVE_RULES[rule_index].metadata
+    rule = FindingRuleReference.from_metadata(metadata)
+    source_event = SourceEventReference(
+        source_type="fortigate",
+        normalized_schema_version="1.0",
+        source_record_number=record_number,
+        source_record_id=f"LOGUID_OPAQUE_{record_number}",
+    )
+    evidence = DetectionEvidence(
+        canonical_path=metadata.evidence_paths[0],
+        observed_value="synthetic-source-observation",
+        source_fields=("event_subtype",),
+        mapping_operation="COPIED",
+        interpretation_status="VERIFIED",
+    )
+    return DetectionFinding(
+        finding_id=build_finding_id(
+            rule_id=rule.rule_id,
+            rule_version=rule.version,
+            source_type=source_event.source_type,
+            normalized_schema_version=source_event.normalized_schema_version,
+            source_record_number=source_event.source_record_number,
+            source_record_id=source_event.source_record_id,
+        ),
+        rule=rule,
+        source_event=source_event,
+        reason_code=metadata.reason_code,
+        summary="A synthetic source-product observation is present.",
+        evidence=(evidence,),
+        time_basis="NOT_USED",
+        uncertainties=("Synthetic findings do not establish attack truth.",),
+        false_positive_note="Synthetic source observations can model legitimate activity.",
+    )
+
+
+def build_stage_1_4_summary(
+    findings_path: Path,
+    findings: tuple[DetectionFinding, ...],
+) -> DetectionRunSummary:
+    """Build bounded Stage 1.4 summary metadata for synthetic finding bytes."""
+
+    findings_by_rule_id: Counter[str] = Counter()
+    findings_by_rule_severity: Counter[str] = Counter()
+    samples_by_rule: dict[str, list[FindingSample]] = {}
+    for finding in findings:
+        findings_by_rule_id[finding.rule.rule_id] += 1
+        findings_by_rule_severity[finding.rule.severity] += 1
+        samples = samples_by_rule.setdefault(finding.rule.rule_id, [])
+        if len(samples) < 5:
+            samples.append(
+                FindingSample(
+                    finding_id=finding.finding_id,
+                    source_record_number=finding.source_event.source_record_number,
+                )
+            )
+
+    return DetectionRunSummary(
+        input_path=str(findings_path.parent / "synthetic_normalized_events.jsonl"),
+        output_path=str(findings_path.resolve()),
+        normalized_input_schema_version="1.0",
+        normalized_input_record_count=len(findings),
+        evaluated_record_count=len(findings),
+        invalid_input_count=0,
+        total_finding_count=len(findings),
+        findings_by_rule_id=dict(findings_by_rule_id),
+        findings_by_rule_severity=dict(findings_by_rule_severity),
+        unique_matched_source_record_count=len(
+            {finding.source_event.source_record_number for finding in findings}
+        ),
+        sample_findings_by_rule={
+            rule_id: tuple(samples) for rule_id, samples in samples_by_rule.items()
+        },
+        active_rules=tuple(
+            ActiveRuleVersion(rule.metadata.rule_id, rule.metadata.version)
+            for rule in ACTIVE_RULES
+        ),
+    )
+
+
+def canonical_payload_bytes(payload: object) -> bytes:
+    """Return compact sorted JSON bytes for a deliberately synthetic payload."""
+
+    return (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n"
+    )
+
+
+def canonical_finding_bytes(findings: tuple[DetectionFinding, ...]) -> bytes:
+    """Return the exact compact Stage 1.4 JSONL bytes for synthetic findings."""
+
+    return b"".join(canonical_payload_bytes(finding.to_dict()) for finding in findings)
+
+
+def write_summary(path: Path, summary: DetectionRunSummary) -> bytes:
+    """Write bounded synthetic summary bytes and return the exact content."""
+
+    content = canonical_payload_bytes(summary.to_dict())
+    path.write_bytes(content)
+    return content
+
+
+def write_synthetic_artifacts(
+    directory: Path,
+    findings: tuple[DetectionFinding, ...],
+) -> tuple[Path, Path, ApprovedArtifactIdentity, DetectionRunSummary]:
+    """Create a synthetic approved finding/summary pair without database access."""
+
+    findings_path = directory / "synthetic_findings.jsonl"
+    findings_bytes = canonical_finding_bytes(findings)
+    findings_path.write_bytes(findings_bytes)
+    summary = build_stage_1_4_summary(findings_path, findings)
+    summary_path = directory / "synthetic_summary.json"
+    summary_bytes = write_summary(summary_path, summary)
+    return (
+        findings_path,
+        summary_path,
+        ApprovedArtifactIdentity(
+            findings_sha256=sha256(findings_bytes).hexdigest(),
+            summary_sha256=sha256(summary_bytes).hexdigest(),
+        ),
+        summary,
     )
 
 
@@ -378,3 +537,488 @@ class StorageSchemaTests(unittest.TestCase):
             self.assertTrue(temporary_path.is_file())
 
         self.assertFalse(temporary_path.exists())
+
+
+class StorageInputValidationTests(unittest.TestCase):
+    """Synthetic tests for the Stage 1.5B strict input boundary."""
+
+    def test_empty_valid_run_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                (),
+            )
+
+            validated = validate_detection_artifacts(
+                findings_path,
+                summary_path,
+                identity,
+            )
+
+        self.assertEqual(validated.run_id, sha256(b"").hexdigest())
+        self.assertEqual(validated.finding_count, 0)
+        self.assertEqual(validated.evidence_count, 0)
+        self.assertEqual(validated.rule_count, len(ACTIVE_RULES))
+
+    def test_valid_artifacts_reconcile_exact_hashes_and_separate_summary_identity(self) -> None:
+        findings = (
+            build_stage_1_4_finding(1),
+            build_stage_1_4_finding(2, rule_index=1),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                findings,
+            )
+
+            validated = validate_detection_artifacts(
+                findings_path,
+                summary_path,
+                identity,
+            )
+
+            self.assertEqual(
+                validated.findings_sha256,
+                sha256(findings_path.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                validated.summary_sha256,
+                sha256(summary_path.read_bytes()).hexdigest(),
+            )
+        self.assertEqual(validated.run_id, validated.findings_sha256)
+        self.assertNotEqual(validated.run_id, validated.summary_sha256)
+        self.assertEqual(validated.finding_count, 2)
+        self.assertEqual(validated.evidence_count, 2)
+
+    def test_summary_declared_future_rule_version_is_accepted(self) -> None:
+        future_rule = FindingRuleReference(
+            rule_id="fortigate.future_product_observation",
+            version="2.0",
+            name="Future product observation",
+            category="SOURCE_PRODUCT_OBSERVATION",
+            severity="LOW",
+        )
+        self.assertNotIn(
+            (future_rule.rule_id, future_rule.version),
+            {
+                (rule.metadata.rule_id, rule.metadata.version)
+                for rule in ACTIVE_RULES
+            },
+        )
+        source_event = SourceEventReference(
+            source_type="fortigate",
+            normalized_schema_version="1.0",
+            source_record_number=1,
+            source_record_id="LOGUID_OPAQUE_1",
+        )
+        future_finding = DetectionFinding(
+            finding_id=build_finding_id(
+                rule_id=future_rule.rule_id,
+                rule_version=future_rule.version,
+                source_type=source_event.source_type,
+                normalized_schema_version=source_event.normalized_schema_version,
+                source_record_number=source_event.source_record_number,
+                source_record_id=source_event.source_record_id,
+            ),
+            rule=future_rule,
+            source_event=source_event,
+            reason_code="FUTURE_PRODUCT_OBSERVATION",
+            summary="A synthetic future source-product observation is present.",
+            evidence=(
+                DetectionEvidence(
+                    canonical_path="event.future_product_observation",
+                    observed_value="synthetic-source-observation",
+                    source_fields=("event_subtype",),
+                    mapping_operation="COPIED",
+                    interpretation_status="VERIFIED",
+                ),
+            ),
+            time_basis="NOT_USED",
+            uncertainties=("Synthetic findings do not establish attack truth.",),
+            false_positive_note="Synthetic source observations can model legitimate activity.",
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                (future_finding,),
+            )
+            future_summary = replace(
+                summary,
+                active_rules=(
+                    ActiveRuleVersion(future_rule.rule_id, future_rule.version),
+                ),
+            )
+            summary_bytes = write_summary(summary_path, future_summary)
+            identity = ApprovedArtifactIdentity(
+                findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                summary_sha256=sha256(summary_bytes).hexdigest(),
+            )
+
+            validated = validate_detection_artifacts(
+                findings_path,
+                summary_path,
+                identity,
+            )
+
+        self.assertEqual(validated.finding_count, 1)
+        self.assertEqual(validated.rule_count, 1)
+        self.assertEqual(validated.summary.active_rules, future_summary.active_rules)
+
+    def test_blank_or_malformed_finding_jsonl_fails_explicitly(self) -> None:
+        for content, expected_code in (
+            (b"\n", "BLANK_JSONL_LINE"),
+            (b"{not-json}\n", "INVALID_JSONL"),
+        ):
+            with self.subTest(expected_code=expected_code):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    directory = Path(temporary_directory)
+                    findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                        directory,
+                        (build_stage_1_4_finding(1),),
+                    )
+                    findings_path.write_bytes(content)
+                    identity = ApprovedArtifactIdentity(
+                        findings_sha256=sha256(content).hexdigest(),
+                        summary_sha256=sha256(summary_path.read_bytes()).hexdigest(),
+                    )
+
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+
+                self.assertEqual(context.exception.code, expected_code)
+                self.assertEqual(context.exception.line_number, 1)
+
+    def test_noncanonical_or_invalid_finding_contract_fails(self) -> None:
+        finding = build_stage_1_4_finding(1)
+        invalid_cases = {
+            "noncanonical": lambda payload: json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(", ", ": "),
+                sort_keys=True,
+            ).encode("utf-8")
+            + b"\n",
+            "wrong_schema": lambda payload: canonical_payload_bytes(
+                {**payload, "finding_schema_version": "2.0"}
+            ),
+            "wrong_id": lambda payload: canonical_payload_bytes(
+                {**payload, "finding_id": "0" * 64}
+            ),
+            "invalid_evidence": lambda payload: canonical_payload_bytes(
+                {**payload, "evidence": []}
+            ),
+        }
+        expected_codes = {
+            "noncanonical": "NONCANONICAL_FINDING",
+            "wrong_schema": "FINDING_CONTRACT_INVALID",
+            "wrong_id": "FINDING_CONTRACT_INVALID",
+            "invalid_evidence": "FINDING_CONTRACT_INVALID",
+        }
+        for name, build_content in invalid_cases.items():
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    directory = Path(temporary_directory)
+                    findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                        directory,
+                        (finding,),
+                    )
+                    content = build_content(finding.to_dict())
+                    findings_path.write_bytes(content)
+                    identity = ApprovedArtifactIdentity(
+                        findings_sha256=sha256(content).hexdigest(),
+                        summary_sha256=sha256(summary_path.read_bytes()).hexdigest(),
+                    )
+
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+
+                self.assertEqual(context.exception.code, expected_codes[name])
+
+    def test_duplicate_finding_id_and_wrong_order_are_rejected(self) -> None:
+        duplicate = build_stage_1_4_finding(1)
+        ordered = (build_stage_1_4_finding(1), build_stage_1_4_finding(2))
+        cases = {
+            "duplicate": (duplicate, duplicate),
+            "wrong_order": (ordered[1], ordered[0]),
+        }
+        expected_codes = {
+            "duplicate": "DUPLICATE_FINDING_ID",
+            "wrong_order": "FINDING_ORDER_INVALID",
+        }
+        for name, findings in cases.items():
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    directory = Path(temporary_directory)
+                    findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                        directory,
+                        findings,
+                    )
+
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+
+                self.assertEqual(context.exception.code, expected_codes[name])
+
+    def test_undeclared_rule_version_and_prohibited_decision_fields_fail(self) -> None:
+        finding = build_stage_1_4_finding(1)
+        modified_rule = FindingRuleReference(
+            rule_id=finding.rule.rule_id,
+            version="2.0",
+            name=finding.rule.name,
+            category=finding.rule.category,
+            severity=finding.rule.severity,
+        )
+        undeclared = DetectionFinding(
+            finding_id=build_finding_id(
+                rule_id=modified_rule.rule_id,
+                rule_version=modified_rule.version,
+                source_type=finding.source_event.source_type,
+                normalized_schema_version=finding.source_event.normalized_schema_version,
+                source_record_number=finding.source_event.source_record_number,
+                source_record_id=finding.source_event.source_record_id,
+            ),
+            rule=modified_rule,
+            source_event=finding.source_event,
+            reason_code=finding.reason_code,
+            summary=finding.summary,
+            evidence=finding.evidence,
+            time_basis=finding.time_basis,
+            uncertainties=finding.uncertainties,
+            false_positive_note=finding.false_positive_note,
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                (undeclared,),
+            )
+            with self.assertRaises(StorageInputValidationError) as context:
+                validate_detection_artifacts(findings_path, summary_path, identity)
+            self.assertEqual(context.exception.code, "UNDECLARED_RULE_VERSION")
+
+            payload = finding.to_dict()
+            payload["is_attack"] = True
+            prohibited_content = canonical_payload_bytes(payload)
+            findings_path.write_bytes(prohibited_content)
+            prohibited_identity = ApprovedArtifactIdentity(
+                findings_sha256=sha256(prohibited_content).hexdigest(),
+                summary_sha256=sha256(summary_path.read_bytes()).hexdigest(),
+            )
+            with self.assertRaises(StorageInputValidationError) as context:
+                validate_detection_artifacts(
+                    findings_path,
+                    summary_path,
+                    prohibited_identity,
+                )
+            self.assertEqual(context.exception.code, "PROHIBITED_DECISION_FIELD")
+
+    def test_malformed_summary_and_missing_summary_field_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            duplicate_active_rules = summary.to_dict()
+            duplicate_active_rules["active_rules"].append(
+                duplicate_active_rules["active_rules"][0]
+            )
+            for content, expected_code in (
+                (b"{not-json}", "INVALID_SUMMARY_JSON"),
+                (
+                    canonical_payload_bytes(
+                        {
+                            key: value
+                            for key, value in summary.to_dict().items()
+                            if key != "active_rules"
+                        }
+                    ),
+                    "SUMMARY_SCHEMA_MISMATCH",
+                ),
+                (
+                    canonical_payload_bytes(duplicate_active_rules),
+                    "SUMMARY_CONTRACT_INVALID",
+                ),
+                (
+                    canonical_payload_bytes(
+                        replace(
+                            summary,
+                            output_path=str(directory / "different_findings.jsonl"),
+                        ).to_dict()
+                    ),
+                    "SUMMARY_OUTPUT_PATH_MISMATCH",
+                ),
+            ):
+                with self.subTest(expected_code=expected_code):
+                    summary_path.write_bytes(content)
+                    identity = ApprovedArtifactIdentity(
+                        findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                        summary_sha256=sha256(content).hexdigest(),
+                    )
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+                    self.assertEqual(context.exception.code, expected_code)
+
+    def test_summary_count_reconciliation_mismatches_fail(self) -> None:
+        finding = build_stage_1_4_finding(1)
+        other_rule_id = ACTIVE_RULES[1].metadata.rule_id
+        original_sample = FindingSample(
+            finding_id=finding.finding_id,
+            source_record_number=finding.source_event.source_record_number,
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                (finding,),
+            )
+            mismatches = {
+                "finding_count": (
+                    replace(
+                        summary,
+                        total_finding_count=2,
+                        findings_by_rule_id={finding.rule.rule_id: 2},
+                        findings_by_rule_severity={finding.rule.severity: 2},
+                    ),
+                    "SUMMARY_FINDING_COUNT_MISMATCH",
+                ),
+                "rule_count": (
+                    replace(
+                        summary,
+                        findings_by_rule_id={other_rule_id: 1},
+                        sample_findings_by_rule={other_rule_id: (original_sample,)},
+                    ),
+                    "SUMMARY_RULE_COUNT_MISMATCH",
+                ),
+                "severity_count": (
+                    replace(summary, findings_by_rule_severity={"LOW": 1}),
+                    "SUMMARY_SEVERITY_COUNT_MISMATCH",
+                ),
+                "matched_record_count": (
+                    replace(summary, unique_matched_source_record_count=2),
+                    "SUMMARY_MATCHED_RECORD_COUNT_MISMATCH",
+                ),
+                "evaluated_record_count": (
+                    replace(summary, evaluated_record_count=2),
+                    "SUMMARY_RECORD_COUNT_MISMATCH",
+                ),
+                "invalid_input_count": (
+                    replace(summary, invalid_input_count=1),
+                    "SUMMARY_INVALID_INPUT_COUNT",
+                ),
+                "samples": (
+                    replace(summary, sample_findings_by_rule={}),
+                    "SUMMARY_SAMPLE_MISMATCH",
+                ),
+            }
+            for name, (mismatched_summary, expected_code) in mismatches.items():
+                with self.subTest(name=name):
+                    summary_bytes = write_summary(summary_path, mismatched_summary)
+                    identity = ApprovedArtifactIdentity(
+                        findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                        summary_sha256=sha256(summary_bytes).hexdigest(),
+                    )
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+                    self.assertEqual(context.exception.code, expected_code)
+
+    def test_expected_artifact_hash_mismatches_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            mismatches = (
+                (
+                    ApprovedArtifactIdentity("0" * 64, identity.summary_sha256),
+                    "FINDINGS_HASH_MISMATCH",
+                ),
+                (
+                    ApprovedArtifactIdentity(identity.findings_sha256, "1" * 64),
+                    "SUMMARY_HASH_MISMATCH",
+                ),
+            )
+            for mismatched_identity, expected_code in mismatches:
+                with self.subTest(expected_code=expected_code):
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(
+                            findings_path,
+                            summary_path,
+                            mismatched_identity,
+                        )
+                    self.assertEqual(context.exception.code, expected_code)
+
+    def test_raw_and_normalized_artifacts_are_rejected_before_opening(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            _, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            fake_project_root = directory / "project"
+            raw_path = fake_project_root / "data" / "raw" / "blocked.csv"
+            normalized_path = (
+                fake_project_root
+                / "data"
+                / "processed"
+                / "stage_1_3f_normalized_events.jsonl"
+            )
+            raw_path.parent.mkdir(parents=True)
+            normalized_path.parent.mkdir(parents=True)
+            raw_path.write_text("not-opened", encoding="utf-8")
+            normalized_path.write_text("not-opened", encoding="utf-8")
+
+            with patch.object(storage_input, "PROJECT_ROOT", fake_project_root):
+                for blocked_path in (raw_path, normalized_path):
+                    with self.subTest(blocked_path=blocked_path.name):
+                        with patch.object(
+                            Path,
+                            "open",
+                            side_effect=AssertionError("blocked path was opened"),
+                        ) as open_mock:
+                            with self.assertRaises(StorageInputValidationError) as context:
+                                validate_detection_artifacts(
+                                    blocked_path,
+                                    summary_path,
+                                    identity,
+                                )
+                        self.assertEqual(
+                            context.exception.code,
+                            "UPSTREAM_ARTIFACT_FORBIDDEN",
+                        )
+                        open_mock.assert_not_called()
+
+    def test_finding_jsonl_streaming_does_not_use_whole_file_read_helpers(self) -> None:
+        findings = tuple(build_stage_1_4_finding(number) for number in range(1, 8))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, _ = write_synthetic_artifacts(
+                directory,
+                findings,
+            )
+            original_read_bytes = Path.read_bytes
+
+            def guarded_read_bytes(path: Path) -> bytes:
+                if path.resolve() == findings_path.resolve():
+                    raise AssertionError("finding JSONL must be streamed, not read at once")
+                return original_read_bytes(path)
+
+            def blocked_read_text(path: Path, *args: object, **kwargs: object) -> str:
+                raise AssertionError("finding JSONL must not use read_text")
+
+            with patch.object(Path, "read_bytes", new=guarded_read_bytes), patch.object(
+                Path,
+                "read_text",
+                new=blocked_read_text,
+            ):
+                validated = validate_detection_artifacts(
+                    findings_path,
+                    summary_path,
+                    identity,
+                )
+
+        self.assertEqual(validated.finding_count, len(findings))

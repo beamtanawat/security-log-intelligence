@@ -28,6 +28,7 @@ from storage.models import (  # noqa: E402
 )
 from storage import input as storage_input  # noqa: E402
 from storage import importer as storage_importer  # noqa: E402
+from storage import audit as storage_audit  # noqa: E402
 from storage import query as storage_query  # noqa: E402
 from storage.input import (  # noqa: E402
     ApprovedArtifactIdentity,
@@ -38,6 +39,7 @@ from storage.importer import (  # noqa: E402
     StorageImportError,
     import_detection_run,
 )
+from storage.audit import StorageAuditError, audit_detection_store  # noqa: E402
 from storage.query import (  # noqa: E402
     StorageQueryError,
     get_detection_run,
@@ -64,6 +66,7 @@ from detection.models import (  # noqa: E402
 )
 from detection.rules import ACTIVE_RULES  # noqa: E402
 from load_detection_store import main as load_detection_store_main  # noqa: E402
+from audit_detection_store import main as audit_detection_store_main  # noqa: E402
 from query_detection_store import main as query_detection_store_main  # noqa: E402
 
 
@@ -1721,3 +1724,215 @@ class StorageQueryTests(unittest.TestCase):
             lines = stdout.getvalue().splitlines()
             self.assertEqual(len(lines), 1)
             self.assertEqual(json.loads(lines[0])["finding_id"], findings[0].finding_id)
+
+
+class StorageAuditTests(unittest.TestCase):
+    """Synthetic Stage 1.5E tests for independent logical storage audits."""
+
+    def _import_store(
+        self,
+        directory: Path,
+        findings: tuple[DetectionFinding, ...],
+    ) -> tuple[Path, object]:
+        findings_path, summary_path, _, _ = write_synthetic_artifacts(directory, findings)
+        processed_directory = temporary_processed_directory(directory)
+        database_path = processed_directory / "audit_store.sqlite3"
+        with patch.object(
+            storage_importer,
+            "PROCESSED_DATA_DIRECTORY",
+            processed_directory,
+        ):
+            imported = import_detection_run(findings_path, summary_path, database_path)
+        return database_path, imported
+
+    def test_valid_store_has_deterministic_logical_round_trip(self) -> None:
+        findings = (
+            finding_with_two_evidence_entries(1),
+            build_stage_1_4_finding(2, rule_index=1),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, imported = self._import_store(directory, findings)
+            database_hash_before = sha256(database_path.read_bytes()).hexdigest()
+            with patch.object(
+                storage_audit,
+                "PROCESSED_DATA_DIRECTORY",
+                database_path.parent,
+            ):
+                first_result = audit_detection_store(database_path)
+                second_result = audit_detection_store(database_path)
+
+            self.assertEqual(first_result, second_result)
+            self.assertEqual(first_result.run_id, imported.run_id)
+            self.assertEqual(first_result.reconstructed_findings_sha256, imported.findings_sha256)
+            self.assertEqual(first_result.finding_count, len(findings))
+            self.assertEqual(first_result.evidence_count, 3)
+            self.assertEqual(
+                sha256(database_path.read_bytes()).hexdigest(), database_hash_before
+            )
+
+    def test_audit_rejects_contract_and_projection_tampering(self) -> None:
+        cases = (
+            (
+                "metadata",
+                "UPDATE storage_metadata SET value = ? WHERE key = ?",
+                ("incorrect", "storage_schema_version"),
+                "STORAGE_METADATA_MISMATCH",
+            ),
+            (
+                "schema_version",
+                "PRAGMA user_version = 2",
+                (),
+                "SCHEMA_VERSION_MISMATCH",
+            ),
+            (
+                "index",
+                "DROP INDEX findings_by_rule",
+                (),
+                "SCHEMA_INDEX_MISMATCH",
+            ),
+            (
+                "run_identity",
+                "UPDATE detection_runs SET findings_sha256 = ?",
+                ("f" * 64,),
+                "RUN_IDENTITY_MISMATCH",
+            ),
+            (
+                "summary_hash_format",
+                "UPDATE detection_runs SET summary_sha256 = ?",
+                ("not-a-sha256",),
+                "AUDIT_RESULT_CONTRACT_INVALID",
+            ),
+            (
+                "invalid_input_count",
+                "UPDATE detection_runs SET invalid_input_count = 1",
+                (),
+                "RUN_INVALID_INPUT_COUNT",
+            ),
+            (
+                "run_record_count",
+                "UPDATE detection_runs SET evaluated_record_count = 2",
+                (),
+                "RUN_RECORD_COUNT_MISMATCH",
+            ),
+            (
+                "finding_count",
+                "UPDATE detection_runs SET total_finding_count = 2",
+                (),
+                "FINDING_COUNT_MISMATCH",
+            ),
+            (
+                "matched_source_record_count",
+                "UPDATE detection_runs SET unique_matched_source_record_count = 2",
+                (),
+                "MATCHED_SOURCE_RECORD_COUNT_MISMATCH",
+            ),
+            (
+                "rule_ordinal",
+                "UPDATE run_rules SET ordinal = 2 WHERE ordinal = 0",
+                (),
+                "RULE_ORDINAL_MISMATCH",
+            ),
+            (
+                "rule_reference",
+                "UPDATE findings SET rule_id = ?",
+                ("fortigate.changed_observation",),
+                "FOREIGN_KEY_CHECK_FAILED",
+            ),
+            (
+                "finding_projection",
+                "UPDATE findings SET summary = ?",
+                ("changed summary",),
+                "FINDING_PROJECTION_MISMATCH",
+            ),
+            (
+                "canonical",
+                "UPDATE findings SET canonical_finding_json = ?",
+                ("{invalid-json",),
+                "CANONICAL_FINDING_INVALID",
+            ),
+            (
+                "noncanonical_finding",
+                "UPDATE findings SET canonical_finding_json = canonical_finding_json || ' '",
+                (),
+                "CANONICAL_FINDING_NONCANONICAL",
+            ),
+            (
+                "evidence",
+                "UPDATE finding_evidence SET observed_value_json = ?",
+                ('"changed-value"',),
+                "EVIDENCE_PROJECTION_MISMATCH",
+            ),
+            (
+                "evidence_order",
+                "UPDATE finding_evidence SET ordinal = 2 WHERE ordinal = 0",
+                (),
+                "EVIDENCE_PROJECTION_MISMATCH",
+            ),
+            (
+                "orphan_evidence",
+                "UPDATE finding_evidence SET finding_id = ?",
+                ("f" * 64,),
+                "FOREIGN_KEY_CHECK_FAILED",
+            ),
+        )
+        for name, statement, parameters, expected_code in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary_directory:
+                directory = Path(temporary_directory)
+                database_path, _ = self._import_store(
+                    directory,
+                    (finding_with_two_evidence_entries(1),),
+                )
+                connection = sqlite3.connect(database_path)
+                try:
+                    if name in {"run_identity", "summary_hash_format"}:
+                        connection.execute("PRAGMA ignore_check_constraints = ON")
+                    connection.execute(statement, parameters)
+                    connection.commit()
+                finally:
+                    connection.close()
+                with patch.object(
+                    storage_audit,
+                    "PROCESSED_DATA_DIRECTORY",
+                    database_path.parent,
+                ):
+                    with self.assertRaises(StorageAuditError) as context:
+                        audit_detection_store(database_path)
+                self.assertEqual(context.exception.code, expected_code)
+
+    def test_audit_cli_is_bounded_and_upstream_paths_are_rejected_before_opening(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, imported = self._import_store(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            stdout = StringIO()
+            stderr = StringIO()
+            with patch.object(
+                storage_audit,
+                "PROCESSED_DATA_DIRECTORY",
+                database_path.parent,
+            ), redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = audit_detection_store_main(("--database", str(database_path)))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(json.loads(stdout.getvalue())["run_id"], imported.run_id)
+
+            fake_project_root = directory / "upstream_project"
+            raw_path = fake_project_root / "data" / "raw" / "blocked.csv"
+            raw_path.parent.mkdir(parents=True)
+            raw_path.write_text("not-opened", encoding="utf-8")
+            with patch.object(
+                storage_audit,
+                "PROCESSED_DATA_DIRECTORY",
+                database_path.parent,
+            ), patch.object(storage_audit, "PROJECT_ROOT", fake_project_root), patch.object(
+                Path,
+                "open",
+                side_effect=AssertionError("upstream input was opened"),
+            ) as open_mock:
+                with self.assertRaises(StorageAuditError) as context:
+                    audit_detection_store(raw_path)
+            self.assertEqual(context.exception.code, "UPSTREAM_ARTIFACT_FORBIDDEN")
+            open_mock.assert_not_called()

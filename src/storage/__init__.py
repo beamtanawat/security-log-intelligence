@@ -27,6 +27,7 @@ from .input import (
     validate_detection_artifacts,
 )
 from .importer import StorageImportError, import_detection_run
+from .audit import StorageAuditError, audit_detection_store
 from .query import (
     StorageQueryError,
     get_detection_run,
@@ -55,6 +56,7 @@ __all__ = [
     "STORAGE_USER_VERSION",
     "FindingQuery",
     "StorageAuditResult",
+    "StorageAuditError",
     "StorageContractError",
     "StorageImportSummary",
     "StoredDetectionRun",
@@ -69,6 +71,7 @@ __all__ = [
     "configure_connection",
     "create_storage_schema",
     "import_detection_run",
+    "audit_detection_store",
     "get_detection_run",
     "get_finding",
     "get_finding_evidence",

@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from storage.models import (  # noqa: E402
+    EvidenceQuery,
     FindingQuery,
     StorageAuditResult,
     StorageContractError,
@@ -27,6 +28,7 @@ from storage.models import (  # noqa: E402
 )
 from storage import input as storage_input  # noqa: E402
 from storage import importer as storage_importer  # noqa: E402
+from storage import query as storage_query  # noqa: E402
 from storage.input import (  # noqa: E402
     ApprovedArtifactIdentity,
     StorageInputValidationError,
@@ -35,6 +37,13 @@ from storage.input import (  # noqa: E402
 from storage.importer import (  # noqa: E402
     StorageImportError,
     import_detection_run,
+)
+from storage.query import (  # noqa: E402
+    StorageQueryError,
+    get_detection_run,
+    get_finding,
+    get_finding_evidence,
+    list_findings,
 )
 from storage.schema import (  # noqa: E402
     REQUIRED_INDEX_NAMES,
@@ -55,6 +64,7 @@ from detection.models import (  # noqa: E402
 )
 from detection.rules import ACTIVE_RULES  # noqa: E402
 from load_detection_store import main as load_detection_store_main  # noqa: E402
+from query_detection_store import main as query_detection_store_main  # noqa: E402
 
 
 RUN_ID = "a" * 64
@@ -1398,3 +1408,316 @@ class StorageImportTests(unittest.TestCase):
                     "summary_sha256": sha256(summary_path.read_bytes()).hexdigest(),
                 },
             )
+
+
+class StorageQueryTests(unittest.TestCase):
+    """Synthetic Stage 1.5D tests for bounded read-only store queries."""
+
+    def _import_store(
+        self,
+        directory: Path,
+        findings: tuple[DetectionFinding, ...],
+    ) -> tuple[Path, object]:
+        findings_path, summary_path, _, _ = write_synthetic_artifacts(directory, findings)
+        processed_directory = temporary_processed_directory(directory)
+        database_path = processed_directory / "query_store.sqlite3"
+        with patch.object(
+            storage_importer,
+            "PROCESSED_DATA_DIRECTORY",
+            processed_directory,
+        ):
+            imported = import_detection_run(findings_path, summary_path, database_path)
+        return database_path, imported
+
+    def test_get_run_and_finding_preserve_stored_canonical_payload(self) -> None:
+        findings = (finding_with_two_evidence_entries(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, imported = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            database_hash_before = sha256(database_path.read_bytes()).hexdigest()
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                stored_run = get_detection_run(database_path, imported.run_id)
+                stored_finding = get_finding(database_path, findings[0].finding_id)
+                missing_finding = get_finding(database_path, "f" * 64)
+
+            self.assertIsNotNone(stored_run)
+            self.assertEqual(stored_run.run_id, imported.run_id)
+            self.assertEqual(stored_run.findings_sha256, imported.findings_sha256)
+            self.assertIsNotNone(stored_finding)
+            self.assertEqual(stored_finding.finding_id, findings[0].finding_id)
+            self.assertEqual(
+                stored_finding.canonical_finding_json,
+                canonical_payload_bytes(findings[0].to_dict())[:-1].decode("utf-8"),
+            )
+            self.assertIsNone(missing_finding)
+            self.assertEqual(
+                sha256(database_path.read_bytes()).hexdigest(), database_hash_before
+            )
+
+    def test_malformed_canonical_finding_is_rejected(self) -> None:
+        findings = (build_stage_1_4_finding(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, _ = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    "UPDATE findings SET canonical_finding_json = ? WHERE finding_id = ?",
+                    ("{invalid-json", findings[0].finding_id),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageQueryError) as context:
+                    get_finding(database_path, findings[0].finding_id)
+
+            self.assertEqual(context.exception.code, "CANONICAL_FINDING_INVALID")
+
+    def test_relational_finding_projection_mismatch_is_rejected(self) -> None:
+        findings = (build_stage_1_4_finding(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, _ = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    "UPDATE findings SET rule_id = ? WHERE finding_id = ?",
+                    ("fortigate.changed_observation", findings[0].finding_id),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageQueryError) as context:
+                    get_finding(database_path, findings[0].finding_id)
+
+            self.assertEqual(context.exception.code, "FINDING_PROJECTION_MISMATCH")
+
+    def test_relational_evidence_projection_mismatch_is_rejected(self) -> None:
+        findings = (finding_with_two_evidence_entries(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, _ = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    "UPDATE finding_evidence SET observed_value_json = ? "
+                    "WHERE finding_id = ? AND ordinal = 0",
+                    ('"changed-value"', findings[0].finding_id),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageQueryError) as context:
+                    get_finding(database_path, findings[0].finding_id)
+
+            self.assertEqual(context.exception.code, "EVIDENCE_PROJECTION_MISMATCH")
+
+    def test_list_findings_filters_are_parameterized_bounded_and_ordered(self) -> None:
+        findings = (
+            finding_with_two_evidence_entries(1),
+            build_stage_1_4_finding(2, rule_index=1),
+            build_stage_1_4_finding(3),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, imported = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            evidence_path = findings[0].evidence[-1].canonical_path
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                by_rule = list_findings(
+                    database_path,
+                    FindingQuery(
+                        run_id=imported.run_id,
+                        rule_id=findings[0].rule.rule_id,
+                        rule_version=findings[0].rule.version,
+                        severity=findings[0].rule.severity,
+                        limit=10,
+                    ),
+                )
+                by_evidence = list_findings(
+                    database_path,
+                    FindingQuery(evidence_path=evidence_path, limit=10),
+                )
+                limited = list_findings(database_path, FindingQuery(limit=2))
+                first_order = list_findings(database_path, FindingQuery(limit=10))
+                second_order = list_findings(database_path, FindingQuery(limit=10))
+                injection_value = list_findings(
+                    database_path,
+                    FindingQuery(source_type="fortigate' OR 1=1 --", limit=10),
+                )
+
+            self.assertEqual(
+                tuple(result.finding_id for result in by_rule),
+                (findings[0].finding_id, findings[2].finding_id),
+            )
+            self.assertEqual(
+                tuple(result.finding_id for result in by_evidence),
+                (findings[0].finding_id,),
+            )
+            self.assertEqual(len(limited), 2)
+            self.assertEqual(first_order, second_order)
+            self.assertEqual(
+                tuple(result.source_record_number for result in first_order), (1, 2, 3)
+            )
+            self.assertEqual(injection_value, ())
+
+    def test_evidence_lookup_is_ordered_and_explicitly_bounded(self) -> None:
+        findings = (finding_with_two_evidence_entries(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, imported = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                evidence = get_finding_evidence(
+                    database_path,
+                    EvidenceQuery(
+                        run_id=imported.run_id,
+                        finding_id=findings[0].finding_id,
+                        limit=10,
+                    ),
+                )
+                limited_evidence = get_finding_evidence(
+                    database_path,
+                    EvidenceQuery(
+                        run_id=imported.run_id,
+                        finding_id=findings[0].finding_id,
+                        limit=1,
+                    ),
+                )
+
+            self.assertEqual(tuple(item.ordinal for item in evidence), (0, 1))
+            self.assertEqual(len(limited_evidence), 1)
+            self.assertEqual(
+                evidence[0].observed_value_json,
+                canonical_payload_bytes(findings[0].evidence[0].observed_value)[
+                    :-1
+                ].decode("utf-8"),
+            )
+
+    def test_invalid_limits_and_database_paths_fail_without_opening_upstream_data(self) -> None:
+        with self.assertRaises(StorageContractError):
+            EvidenceQuery(run_id=RUN_ID, finding_id=FINDING_ID, limit=0)
+        with self.assertRaises(StorageContractError):
+            EvidenceQuery(run_id=RUN_ID, finding_id=FINDING_ID, limit=True)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            processed_directory = temporary_processed_directory(directory)
+            missing_database_path = processed_directory / "missing.sqlite3"
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageQueryError) as context:
+                    get_detection_run(missing_database_path, RUN_ID)
+            self.assertEqual(context.exception.code, "DATABASE_NOT_FOUND")
+
+            fake_project_root = directory / "upstream_project"
+            raw_path = fake_project_root / "data" / "raw" / "blocked.csv"
+            normalized_path = (
+                fake_project_root
+                / "data"
+                / "processed"
+                / "stage_1_3f_normalized_events.jsonl"
+            )
+            raw_path.parent.mkdir(parents=True)
+            normalized_path.parent.mkdir(parents=True)
+            raw_path.write_text("not-opened", encoding="utf-8")
+            normalized_path.write_text("not-opened", encoding="utf-8")
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ), patch.object(storage_query, "PROJECT_ROOT", fake_project_root):
+                for upstream_path in (raw_path, normalized_path):
+                    with self.subTest(upstream_path=upstream_path.name), patch.object(
+                        Path,
+                        "open",
+                        side_effect=AssertionError("upstream input was opened"),
+                    ) as open_mock:
+                        with self.assertRaises(StorageQueryError) as context:
+                            get_detection_run(upstream_path, RUN_ID)
+                    self.assertEqual(context.exception.code, "UPSTREAM_ARTIFACT_FORBIDDEN")
+                    open_mock.assert_not_called()
+
+    def test_invalid_database_contract_fails_without_result_exposure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            processed_directory = temporary_processed_directory(directory)
+            invalid_database_path = processed_directory / "invalid.sqlite3"
+            invalid_database_path.write_bytes(b"not a sqlite database")
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageQueryError) as context:
+                    get_detection_run(invalid_database_path, RUN_ID)
+
+            self.assertEqual(context.exception.code, "DATABASE_READ_FAILED")
+
+    def test_query_cli_emits_bounded_deterministic_jsonl(self) -> None:
+        findings = (
+            build_stage_1_4_finding(1),
+            build_stage_1_4_finding(2, rule_index=1),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            database_path, _ = self._import_store(directory, findings)
+            processed_directory = database_path.parent
+            stdout = StringIO()
+            stderr = StringIO()
+
+            with patch.object(
+                storage_query,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ), redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = query_detection_store_main(
+                    ("--database", str(database_path), "findings", "--limit", "1")
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            lines = stdout.getvalue().splitlines()
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(json.loads(lines[0])["finding_id"], findings[0].finding_id)

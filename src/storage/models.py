@@ -1,7 +1,7 @@
 """Immutable Stage 1.5 storage contracts.
 
 These types define bounded storage-facing values only. They do not parse finding
-artifacts, import a detection run, execute a query, or make a security decision.
+artifacts, import a detection run, execute SQL, or make a security decision.
 """
 
 from __future__ import annotations
@@ -173,7 +173,7 @@ class StorageAuditResult:
 
 @dataclass(frozen=True)
 class FindingQuery:
-    """Allowlisted filter values for a future bounded read-only query interface."""
+    """Allowlisted filter values for the bounded read-only query interface."""
 
     run_id: str | None = None
     finding_id: str | None = None
@@ -210,3 +210,136 @@ class FindingQuery:
             raise StorageContractError(
                 f"limit must be between 1 and {MAX_QUERY_LIMIT}"
             )
+
+
+@dataclass(frozen=True)
+class EvidenceQuery:
+    """Allowlisted bounded lookup for one finding's stored evidence."""
+
+    run_id: str
+    finding_id: str
+    limit: int = DEFAULT_QUERY_LIMIT
+
+    def __post_init__(self) -> None:
+        _require_sha256(self.run_id, "run_id")
+        _require_sha256(self.finding_id, "finding_id")
+        if isinstance(self.limit, bool) or not isinstance(self.limit, int):
+            raise StorageContractError("limit must be an integer")
+        if not 1 <= self.limit <= MAX_QUERY_LIMIT:
+            raise StorageContractError(
+                f"limit must be between 1 and {MAX_QUERY_LIMIT}"
+            )
+
+
+@dataclass(frozen=True)
+class StoredDetectionRun:
+    """Typed, bounded projection of one stored detection run."""
+
+    run_id: str
+    findings_sha256: str
+    summary_sha256: str
+    finding_artifact_path: str
+    summary_artifact_path: str
+    finding_schema_version: str
+    normalized_input_schema_version: str
+    normalized_input_record_count: int
+    evaluated_record_count: int
+    invalid_input_count: int
+    total_finding_count: int
+    unique_matched_source_record_count: int
+
+    def to_dict(self) -> dict[str, str | int]:
+        """Return stored metadata without reading upstream artifacts."""
+
+        return {
+            "run_id": self.run_id,
+            "findings_sha256": self.findings_sha256,
+            "summary_sha256": self.summary_sha256,
+            "finding_artifact_path": self.finding_artifact_path,
+            "summary_artifact_path": self.summary_artifact_path,
+            "finding_schema_version": self.finding_schema_version,
+            "normalized_input_schema_version": self.normalized_input_schema_version,
+            "normalized_input_record_count": self.normalized_input_record_count,
+            "evaluated_record_count": self.evaluated_record_count,
+            "invalid_input_count": self.invalid_input_count,
+            "total_finding_count": self.total_finding_count,
+            "unique_matched_source_record_count": self.unique_matched_source_record_count,
+        }
+
+
+@dataclass(frozen=True)
+class StoredFinding:
+    """Typed stored finding projection with its unchanged canonical JSON text."""
+
+    run_id: str
+    finding_id: str
+    finding_schema_version: str
+    rule_id: str
+    rule_version: str
+    rule_name: str
+    rule_category: str
+    rule_severity: str
+    source_type: str
+    normalized_schema_version: str
+    source_record_number: int
+    source_record_id: str | None
+    reason_code: str
+    summary: str
+    time_basis: str
+    uncertainties_json: str
+    false_positive_note: str
+    deterministic: bool
+    canonical_finding_json: str
+
+    def to_dict(self) -> dict[str, str | int | bool | None]:
+        """Return stored fields without parsing or reserializing canonical JSON."""
+
+        return {
+            "run_id": self.run_id,
+            "finding_id": self.finding_id,
+            "finding_schema_version": self.finding_schema_version,
+            "rule_id": self.rule_id,
+            "rule_version": self.rule_version,
+            "rule_name": self.rule_name,
+            "rule_category": self.rule_category,
+            "rule_severity": self.rule_severity,
+            "source_type": self.source_type,
+            "normalized_schema_version": self.normalized_schema_version,
+            "source_record_number": self.source_record_number,
+            "source_record_id": self.source_record_id,
+            "reason_code": self.reason_code,
+            "summary": self.summary,
+            "time_basis": self.time_basis,
+            "uncertainties_json": self.uncertainties_json,
+            "false_positive_note": self.false_positive_note,
+            "deterministic": self.deterministic,
+            "canonical_finding_json": self.canonical_finding_json,
+        }
+
+
+@dataclass(frozen=True)
+class StoredFindingEvidence:
+    """Typed stored evidence/provenance projection for one finding."""
+
+    run_id: str
+    finding_id: str
+    ordinal: int
+    canonical_path: str
+    observed_value_json: str
+    source_fields_json: str
+    mapping_operation: str
+    interpretation_status: str
+
+    def to_dict(self) -> dict[str, str | int]:
+        """Return the stored projection without dereferencing upstream evidence."""
+
+        return {
+            "run_id": self.run_id,
+            "finding_id": self.finding_id,
+            "ordinal": self.ordinal,
+            "canonical_path": self.canonical_path,
+            "observed_value_json": self.observed_value_json,
+            "source_fields_json": self.source_fields_json,
+            "mapping_operation": self.mapping_operation,
+            "interpretation_status": self.interpretation_status,
+        }

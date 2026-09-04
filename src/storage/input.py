@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -291,6 +291,40 @@ def _resolve_input_path(value: str | Path, label: str) -> Path:
             "ARTIFACT_NOT_FOUND", f"{label} must be an existing regular file."
         )
     return resolved_path
+
+
+def _sha256_file(path: Path) -> str:
+    """Return one file's SHA-256 without loading its content into memory."""
+
+    digest = sha256()
+    try:
+        with path.open("rb") as artifact_file:
+            while chunk := artifact_file.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as error:
+        raise StorageInputValidationError(
+            "ARTIFACT_READ_ERROR", "Artifact cannot be read for SHA-256 validation."
+        ) from error
+    return digest.hexdigest()
+
+
+def calculate_artifact_identity(
+    findings_path: str | Path,
+    summary_path: str | Path,
+) -> ApprovedArtifactIdentity:
+    """Safely hash the two Stage 1.4 artifacts before strict parsing begins."""
+
+    resolved_findings_path = _resolve_input_path(findings_path, "findings_path")
+    resolved_summary_path = _resolve_input_path(summary_path, "summary_path")
+    if resolved_findings_path == resolved_summary_path:
+        raise StorageInputValidationError(
+            "ARTIFACT_PATHS_EQUAL",
+            "Finding and summary artifact paths must be different.",
+        )
+    return ApprovedArtifactIdentity(
+        findings_sha256=_sha256_file(resolved_findings_path),
+        summary_sha256=_sha256_file(resolved_summary_path),
+    )
 
 
 def _as_detection_finding(payload: object, line_number: int) -> DetectionFinding:
@@ -580,6 +614,7 @@ def _stream_findings(
     expected_sha256: str,
     *,
     declared_rules: tuple[ActiveRuleVersion, ...],
+    on_finding: Callable[[DetectionFinding], None] | None = None,
 ) -> _FindingStatistics:
     """Validate one canonical finding line at a time and retain bounded aggregates."""
 
@@ -651,6 +686,8 @@ def _stream_findings(
                     declared_rule_identities=declared_rule_identities,
                     line_number=line_number,
                 )
+                if on_finding is not None:
+                    on_finding(finding)
 
                 finding_count += 1
                 evidence_count += len(finding.evidence)
@@ -738,6 +775,8 @@ def validate_detection_artifacts(
     findings_path: str | Path,
     summary_path: str | Path,
     expected_identity: ApprovedArtifactIdentity,
+    *,
+    on_finding: Callable[[DetectionFinding], None] | None = None,
 ) -> ValidatedDetectionArtifacts:
     """Validate one approved Stage 1.4 finding/summary pair with bounded memory.
 
@@ -771,6 +810,7 @@ def validate_detection_artifacts(
         resolved_findings_path,
         expected_identity.findings_sha256,
         declared_rules=declared_rules,
+        on_finding=on_finding,
     )
     _reconcile_summary(summary, statistics)
     return ValidatedDetectionArtifacts(

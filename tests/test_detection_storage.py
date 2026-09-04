@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from hashlib import sha256
+from io import StringIO
 import json
 import sqlite3
 import sys
@@ -24,10 +26,15 @@ from storage.models import (  # noqa: E402
     StorageImportSummary,
 )
 from storage import input as storage_input  # noqa: E402
+from storage import importer as storage_importer  # noqa: E402
 from storage.input import (  # noqa: E402
     ApprovedArtifactIdentity,
     StorageInputValidationError,
     validate_detection_artifacts,
+)
+from storage.importer import (  # noqa: E402
+    StorageImportError,
+    import_detection_run,
 )
 from storage.schema import (  # noqa: E402
     REQUIRED_INDEX_NAMES,
@@ -47,6 +54,7 @@ from detection.models import (  # noqa: E402
     build_finding_id,
 )
 from detection.rules import ACTIVE_RULES  # noqa: E402
+from load_detection_store import main as load_detection_store_main  # noqa: E402
 
 
 RUN_ID = "a" * 64
@@ -316,6 +324,36 @@ def write_synthetic_artifacts(
             summary_sha256=sha256(summary_bytes).hexdigest(),
         ),
         summary,
+    )
+
+
+def temporary_processed_directory(directory: Path) -> Path:
+    """Create an isolated synthetic data/processed directory for import tests."""
+
+    processed_directory = directory / "project" / "data" / "processed"
+    processed_directory.mkdir(parents=True)
+    return processed_directory
+
+
+def finding_with_two_evidence_entries(record_number: int) -> DetectionFinding:
+    """Build one valid finding with two ordered evidence projections."""
+
+    finding = build_stage_1_4_finding(record_number)
+    additional_evidence = DetectionEvidence(
+        canonical_path="threat_observations.threat_name",
+        observed_value="synthetic-threat-observation",
+        source_fields=("threat_name",),
+        mapping_operation="COPIED",
+        interpretation_status="VERIFIED",
+    )
+    return replace(
+        finding,
+        evidence=tuple(
+            sorted(
+                (*finding.evidence, additional_evidence),
+                key=lambda evidence: evidence.canonical_path,
+            )
+        ),
     )
 
 
@@ -1022,3 +1060,341 @@ class StorageInputValidationTests(unittest.TestCase):
                 )
 
         self.assertEqual(validated.finding_count, len(findings))
+
+
+class StorageImportTests(unittest.TestCase):
+    """Synthetic Stage 1.5C tests for transactional single-run database import."""
+
+    def test_import_creates_new_database_and_preserves_finding_projections(self) -> None:
+        findings = (
+            finding_with_two_evidence_entries(1),
+            build_stage_1_4_finding(2, rule_index=1),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                findings,
+            )
+            processed_directory = temporary_processed_directory(directory)
+            database_path = processed_directory / "synthetic_store.sqlite3"
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                imported = import_detection_run(
+                    findings_path,
+                    summary_path,
+                    database_path,
+                )
+
+            self.assertTrue(database_path.is_file())
+            self.assertEqual(imported.run_id, imported.findings_sha256)
+            self.assertEqual(imported.finding_count, len(findings))
+            self.assertEqual(imported.evidence_count, 3)
+            self.assertEqual(imported.rule_count, len(summary.active_rules))
+            self.assertFalse(list(processed_directory.glob(".synthetic_store.*")))
+
+            connection = sqlite3.connect(database_path)
+            try:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT run_id, findings_sha256, summary_sha256, total_finding_count "
+                        "FROM detection_runs"
+                    ).fetchone(),
+                    (
+                        imported.run_id,
+                        imported.findings_sha256,
+                        imported.summary_sha256,
+                        len(findings),
+                    ),
+                )
+                self.assertEqual(
+                    tuple(
+                        connection.execute(
+                            "SELECT rule_id, rule_version FROM run_rules ORDER BY ordinal"
+                        )
+                    ),
+                    tuple((rule.rule_id, rule.version) for rule in summary.active_rules),
+                )
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM findings").fetchone()[0],
+                    len(findings),
+                )
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM finding_evidence").fetchone()[0],
+                    3,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT canonical_finding_json FROM findings "
+                        "WHERE finding_id = ?",
+                        (findings[0].finding_id,),
+                    ).fetchone()[0],
+                    canonical_payload_bytes(findings[0].to_dict())[:-1].decode("utf-8"),
+                )
+                self.assertEqual(
+                    tuple(
+                        connection.execute(
+                            "SELECT canonical_path, observed_value_json, source_fields_json, "
+                            "mapping_operation, interpretation_status "
+                            "FROM finding_evidence WHERE finding_id = ? ORDER BY ordinal",
+                            (findings[0].finding_id,),
+                        )
+                    ),
+                    tuple(
+                        (
+                            evidence.canonical_path,
+                            canonical_payload_bytes(evidence.observed_value)[:-1].decode(
+                                "utf-8"
+                            ),
+                            canonical_payload_bytes(
+                                list(evidence.source_fields)
+                            )[:-1].decode("utf-8"),
+                            evidence.mapping_operation,
+                            evidence.interpretation_status,
+                        )
+                        for evidence in findings[0].evidence
+                    ),
+                )
+                self.assertIsNone(
+                    connection.execute("PRAGMA foreign_key_check").fetchone()
+                )
+            finally:
+                connection.close()
+
+    def test_empty_valid_run_creates_a_single_run_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(directory, ())
+            processed_directory = temporary_processed_directory(directory)
+            database_path = processed_directory / "empty.sqlite3"
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                imported = import_detection_run(
+                    findings_path,
+                    summary_path,
+                    database_path,
+                )
+
+            self.assertEqual(imported.finding_count, 0)
+            self.assertEqual(imported.evidence_count, 0)
+            connection = sqlite3.connect(database_path)
+            try:
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM detection_runs").fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM findings").fetchone()[0],
+                    0,
+                )
+            finally:
+                connection.close()
+
+    def test_existing_final_database_is_rejected_without_modification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            processed_directory = temporary_processed_directory(directory)
+            database_path = processed_directory / "existing.sqlite3"
+            original_bytes = b"existing database must remain unchanged"
+            database_path.write_bytes(original_bytes)
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageImportError) as context:
+                    import_detection_run(findings_path, summary_path, database_path)
+
+            self.assertEqual(context.exception.code, "DATABASE_EXISTS")
+            self.assertEqual(database_path.read_bytes(), original_bytes)
+            self.assertFalse(list(processed_directory.glob(".existing.*")))
+
+    def test_invalid_input_and_mid_import_failure_publish_no_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            processed_directory = temporary_processed_directory(directory)
+            invalid_database_path = processed_directory / "invalid.sqlite3"
+            findings_path.write_bytes(b"{not-json}\n")
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageInputValidationError):
+                    import_detection_run(
+                        findings_path,
+                        summary_path,
+                        invalid_database_path,
+                    )
+
+            self.assertFalse(invalid_database_path.exists())
+            self.assertFalse(list(processed_directory.glob(".invalid.*")))
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1), build_stage_1_4_finding(2)),
+            )
+            processed_directory = temporary_processed_directory(directory)
+            failed_database_path = processed_directory / "failed.sqlite3"
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ), patch.object(
+                storage_importer,
+                "_insert_finding",
+                side_effect=StorageImportError("INJECTED_FAILURE", "Synthetic failure."),
+            ):
+                with self.assertRaises(StorageImportError) as context:
+                    import_detection_run(
+                        findings_path,
+                        summary_path,
+                        failed_database_path,
+                    )
+
+            self.assertEqual(context.exception.code, "INJECTED_FAILURE")
+            self.assertFalse(failed_database_path.exists())
+            self.assertFalse(list(processed_directory.glob(".failed.*")))
+
+    def test_unsafe_output_and_upstream_artifacts_are_rejected_before_opening(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            processed_directory = temporary_processed_directory(directory)
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageImportError) as context:
+                    import_detection_run(findings_path, summary_path, findings_path)
+            self.assertEqual(context.exception.code, "DATABASE_INPUT_PATH_EQUAL")
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageImportError) as context:
+                    import_detection_run(
+                        findings_path,
+                        summary_path,
+                        directory / "outside_processed.sqlite3",
+                    )
+            self.assertEqual(context.exception.code, "DATABASE_OUTSIDE_PROCESSED")
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ):
+                with self.assertRaises(StorageImportError) as context:
+                    import_detection_run(
+                        findings_path,
+                        summary_path,
+                        processed_directory / "missing_parent" / "store.sqlite3",
+                    )
+            self.assertEqual(context.exception.code, "DATABASE_PARENT_UNAVAILABLE")
+
+            fake_project_root = directory / "upstream_project"
+            raw_path = fake_project_root / "data" / "raw" / "blocked.csv"
+            normalized_path = (
+                fake_project_root
+                / "data"
+                / "processed"
+                / "stage_1_3f_normalized_events.jsonl"
+            )
+            raw_path.parent.mkdir(parents=True)
+            normalized_path.parent.mkdir(parents=True)
+            raw_path.write_text("not-opened", encoding="utf-8")
+            normalized_path.write_text("not-opened", encoding="utf-8")
+            blocked_database_path = processed_directory / "blocked.sqlite3"
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ), patch.object(storage_input, "PROJECT_ROOT", fake_project_root):
+                for upstream_path in (raw_path, normalized_path):
+                    with self.subTest(upstream_path=upstream_path.name), patch.object(
+                        Path,
+                        "open",
+                        side_effect=AssertionError("upstream input was opened"),
+                    ) as open_mock:
+                        with self.assertRaises(StorageInputValidationError) as context:
+                            import_detection_run(
+                                upstream_path,
+                                summary_path,
+                                blocked_database_path,
+                            )
+                    self.assertEqual(context.exception.code, "UPSTREAM_ARTIFACT_FORBIDDEN")
+                    open_mock.assert_not_called()
+                    self.assertFalse(blocked_database_path.exists())
+
+    def test_import_cli_prints_only_bounded_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, _ = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+            processed_directory = temporary_processed_directory(directory)
+            database_path = processed_directory / "cli.sqlite3"
+            stdout = StringIO()
+            stderr = StringIO()
+
+            with patch.object(
+                storage_importer,
+                "PROCESSED_DATA_DIRECTORY",
+                processed_directory,
+            ), redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = load_detection_store_main(
+                    (
+                        "--findings",
+                        str(findings_path),
+                        "--summary",
+                        str(summary_path),
+                        "--database",
+                        str(database_path),
+                    )
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(
+                json.loads(stdout.getvalue()),
+                {
+                    "evidence_count": 1,
+                    "finding_count": 1,
+                    "findings_sha256": sha256(findings_path.read_bytes()).hexdigest(),
+                    "rule_count": len(ACTIVE_RULES),
+                    "run_id": sha256(findings_path.read_bytes()).hexdigest(),
+                    "storage_schema_version": "1.0",
+                    "summary_sha256": sha256(summary_path.read_bytes()).hexdigest(),
+                },
+            )

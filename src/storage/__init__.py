@@ -1,8 +1,8 @@
 """Stage 1.5 storage-contract primitives.
 
 This package defines immutable storage models, SQLite schema creation helpers,
-and strict finding/summary input validation. It does not import data, create a
-final database, query a database, or perform storage audits.
+strict finding/summary input validation, and transactional single-run import.
+It does not query a database or perform storage audits.
 """
 
 from .models import (
@@ -19,8 +19,10 @@ from .input import (
     ApprovedArtifactIdentity,
     StorageInputValidationError,
     ValidatedDetectionArtifacts,
+    calculate_artifact_identity,
     validate_detection_artifacts,
 )
+from .importer import StorageImportError, import_detection_run
 from .schema import (
     REQUIRED_INDEX_NAMES,
     STORAGE_METADATA_VALUES,
@@ -44,9 +46,12 @@ __all__ = [
     "StorageContractError",
     "StorageImportSummary",
     "StorageInputValidationError",
+    "StorageImportError",
     "StorageSchemaError",
     "ValidatedDetectionArtifacts",
+    "calculate_artifact_identity",
     "configure_connection",
     "create_storage_schema",
+    "import_detection_run",
     "validate_detection_artifacts",
 ]

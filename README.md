@@ -75,6 +75,26 @@ or risk scores. See [`docs/detection_contract.md`](docs/detection_contract.md),
 Stage 1.4 does not add thresholds, time windows, correlation, incidents, machine
 learning, storage, APIs, or a dashboard. Any next stage remains separately planned.
 
+### Stage 1.5 — Detection Finding Storage and Read-Only Query Foundation — Complete
+
+Stage 1.5 adds a local SQLite v1 projection for the approved Stage 1.4 finding
+artifacts. It strictly validates the finding JSONL and bounded summary, creates one
+new database transactionally without overwriting an existing database, provides
+typed bounded read-only queries, and independently audits schema integrity,
+provenance projections, exact finding reconstruction, and logical determinism.
+
+The validated storage run reconciled the approved 43 `INFORMATIONAL` findings from
+25 source records and two rules. These remain deterministic source-observation
+findings—not confirmed attacks, malicious activity, compromises, or incidents.
+Storage validation does not reopen the raw CSV or normalized JSONL, and generated
+SQLite artifacts remain ignored and untracked. See
+[`docs/detection_storage_contract.md`](docs/detection_storage_contract.md) and
+[`docs/stage_1_5_storage_findings.md`](docs/stage_1_5_storage_findings.md).
+
+Stage 1.5 does not implement an API, dashboard, authentication, mutable database
+workflow, new detection rule, correlation, incident process, ML, LLM, or deployment.
+A read-only API remains a separately planned next stage.
+
 ## Current Dataset
 
 The initial dataset is:

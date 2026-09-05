@@ -2,7 +2,7 @@
 
 ## Checkpoint status
 
-**Stage 1.5F — REAL-DATA VALIDATION PASS.**
+**Stage 1.5G — FINAL DOCUMENTATION / READINESS PASS.**
 
 The authoritative local Stage 1.5F validator completed with `FINAL RESULT: PASS`.
 It consumed only the approved Stage 1.4 finding JSONL and validation-summary
@@ -85,3 +85,49 @@ reconciliation.
 PASS does **not** mean findings are confirmed attacks, malicious activity,
 compromised hosts, or confirmed incidents. It also does not establish detection
 accuracy, precision, recall, or performance.
+
+## Stage 1.5G reconciliation and readiness
+
+The final documentation review reconciles the Stage 1.5 schema, strict input
+boundary, transactional single-run importer, bounded read-only query interface,
+independent audit, CLIs, synthetic-test coverage, approved artifact identities, and
+the authoritative Stage 1.5F measurements.
+
+```text
+Approved Stage 1.4 findings + summary
+        ↓
+Strict contract validation
+        ↓
+New transactional SQLite store
+        ↓
+Bounded read-only query interface
+        ↓
+Independent schema / provenance / round-trip audit
+        ↓
+Logical determinism and reconciliation
+        ↓
+PASS
+```
+
+The completed storage contract preserves these boundaries:
+
+- `run_id == findings_sha256`; `summary_sha256` is the hash of the complete
+  Stage 1.4F validation envelope.
+- Relational projections and canonical finding JSON must reconcile; a finding cannot
+  reference a rule/version absent from the stored active-rule snapshot.
+- Determinism is evaluated through logical-export, reconstructed-finding, and
+  bounded-query hashes, never SQLite database-file bytes.
+- The importer, queries, audit, and validator reject raw CSV and normalized JSONL
+  as Stage 1.5 inputs. The approved Stage 1.4 finding JSONL and summary are the
+  only real-data boundary.
+- Generated SQLite databases and temporary artifacts remain ignored and untracked.
+
+The final readiness verdict is **PASS** for the completed local storage and
+read-only query foundation. It is ready for a separately planned read-only API
+stage only; no API, authentication, database mutation workflow, dashboard,
+additional detection rule, correlation, incident capability, ML, LLM, or deployment
+feature is part of this stage.
+
+This documentation-only reconciliation does not replace the authoritative Stage
+1.5F runtime result or claim a new runtime execution. No executable or test file
+was changed as part of the Stage 1.5G documentation update.

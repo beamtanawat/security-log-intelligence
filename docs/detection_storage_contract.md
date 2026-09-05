@@ -2,10 +2,9 @@
 
 ## Status and purpose
 
-This document defines the Stage 1.5A SQLite schema contract for an eventual
-single approved Stage 1.4 detection run. It defines schema and immutable
-storage-facing model boundaries only. It does not implement finding/summary input
-parsing, imports, output publication, queries, storage audits, or real-data work.
+This document defines the completed Stage 1.5 contract for one approved Stage 1.4
+detection run. It covers strict artifact validation, SQLite storage, bounded
+read-only queries, and an independent storage audit.
 
 The database is an audited, queryable projection of approved Stage 1.4 evidence.
 It does not create a new security conclusion.
@@ -57,8 +56,8 @@ Stage 1.4 detection evidence.
 
 Stage 1.5 v1 is a **single-run, create-new-database** workflow. Deterministic
 identity supports reproducibility; it is not append, update, delete, re-import, or
-mutable-database idempotency. Existing final database behavior belongs to the later
-transactional importer checkpoint.
+mutable-database idempotency. An existing final database is rejected rather than
+mutated or overwritten.
 
 ## SQLite connection requirements
 
@@ -69,7 +68,7 @@ referential integrity must execute and verify:
 PRAGMA foreign_keys = ON;
 ```
 
-Future read-only query connections must additionally execute and verify:
+Read-only query and audit connections additionally execute and verify:
 
 ```sql
 PRAGMA query_only = ON;
@@ -92,7 +91,7 @@ Represents exactly one approved Stage 1.4 detection run. It retains:
 
 - deterministic run and finding-artifact identities;
 - summary artifact identity;
-- repository-relative/safe artifact-reference fields, validated by a later importer;
+- repository-relative/safe artifact-reference fields;
 - finding and normalized-input contract versions; and
 - bounded count metadata needed for later reconciliation.
 
@@ -167,11 +166,70 @@ reason code, and source type, plus evidence by canonical path. SQLite constraint
 enforce keys, non-null values, allowed fixed vocabularies, non-negative/positive
 numbers, deterministic flag `1`, and referential relationships.
 
-The future strict storage reader is responsible for reconstructing and validating
-the JSON contracts. The future importer is responsible for validating actual input
-artifact paths and safely publishing a new database. The future audit is responsible
-for proving that canonical JSON and relational projections agree. Those behaviors are
-not implemented by this schema checkpoint.
+The strict storage reader reconstructs and validates the JSON contracts. The
+importer validates actual input artifact paths and safely publishes a new database.
+The independent audit proves that canonical JSON and relational projections agree.
+
+## Input boundary and strict validation
+
+The storage boundary accepts only the approved Stage 1.4 finding JSONL and summary.
+It rejects raw-data paths and the Stage 1.3 normalized JSONL path, so Stage 1.5 does
+not repeat upstream parsing, normalization, or detection work.
+
+The reader streams UTF-8 JSONL, hashes both approved inputs, reconstructs every
+finding through the public Stage 1.4 contract, and fails closed on malformed JSON,
+blank lines, duplicate finding IDs or out-of-order canonical finding lines, missing
+or extra contract fields, unsupported rule metadata, count disagreement, invalid evidence, or
+prohibited decision fields. It does not silently repair or skip an input record.
+
+The approved Stage 1.4F summary is accepted only as an exact validation envelope,
+including its required nested objects and `validation_stage = "1.4F"` /
+`verdict = "PASS"`. Storage reconciles against the strict `primary_run` object but
+retains the SHA-256 identity of the complete envelope. Direct
+`DetectionRunSummary` JSON remains intentionally supported for strict
+synthetic/public-contract fixtures; arbitrary nested summaries are rejected.
+
+## Transactional import and publication
+
+`src/load_detection_store.py` requires explicit finding, summary, and database
+paths. The final database path must be new and beneath `data/processed/`; it must
+differ from both input paths. The importer hashes and strictly validates both inputs
+before creating a uniquely named temporary SQLite database beside the requested
+destination. It inserts exactly one run, active-rule snapshot, findings, and ordered
+evidence in a single transaction, then revalidates streamed inputs during insertion
+and checks row counts, `foreign_key_check`, and `integrity_check`.
+
+Publication is non-overwriting and occurs only after the transaction succeeds. On
+failure, the importer rolls back and removes only its verified temporary database
+and possible SQLite sidecars. Its output is a bounded deterministic import summary,
+not an unbounded finding or evidence collection.
+
+## Bounded read-only query contract
+
+`src/query_detection_store.py` provides only allowlisted `run`, `finding`,
+`findings`, and `evidence` operations. The `findings` operation accepts typed
+filters for run ID, finding ID, rule ID/version, severity, reason code, source type,
+source-record number, and evidence path. It uses an SQLite read-only URI,
+`query_only`, foreign-key enforcement, parameterized values, and fixed ordering.
+
+The default result limit is 50 and the maximum is 500. There is no raw SQL,
+caller-supplied column or sort clause, pagination protocol, time filter, or write
+operation. Every returned finding is reconstructed and reconciled against canonical
+JSON and relational evidence before exposure. The CLI emits compact deterministic
+JSON Lines on standard output and concise errors on standard error.
+
+## Independent audit and logical determinism
+
+`src/audit_detection_store.py` audits a completed database through an independent
+read-only path. It verifies the exact schema/index signature and metadata,
+`integrity_check`, `foreign_key_check`, one-run identity, rule order, row counts,
+rule references, canonical finding JSON, evidence order, and evidence projections.
+It produces bounded `StorageAuditResult` metadata, including a canonical
+logical-export SHA-256 and a reconstructed Stage 1.4 finding-JSONL SHA-256.
+
+SQLite database-file bytes are deliberately not a cross-environment determinism
+contract. Equal approved inputs must instead agree on logical-export hashes,
+reconstructed finding hashes, and bounded query-output hashes.
 
 ## Prohibited semantics and deferred work
 
@@ -179,6 +237,25 @@ The schema has no `is_attack`, `is_malicious`, `compromised`,
 `confirmed_incident`, `risk_score`, `confidence_score`, or `attack_probability`
 field. Source event severity remains distinct from Stage 1.4 rule severity.
 
-Stage 1.5A also does not add an importer, JSONL parser, summary reader, storage CLI,
-query interface, audit, real-data scan, API, dashboard, ML, LLM, additional rule,
-correlation, migration framework, or external dependency.
+Stage 1.5 does not reopen or rescan raw CSV data or normalized-event JSONL, add an
+API, dashboard, authentication, database mutation workflow, additional rule,
+threshold, time window, correlation, incident process, external database, ML, LLM,
+or deployment behavior. It is ready only as a foundation for a separately planned
+read-only API stage.
+
+## Validated Stage 1.5F evidence
+
+The approved Stage 1.5F validator used only the approved Stage 1.4 artifacts. It
+completed strict validation, a primary import, independent audit, bounded queries,
+a second import for logical determinism, source-artifact integrity checks, and Git
+safety checks. The measured results are recorded in
+[`stage_1_5_storage_findings.md`](stage_1_5_storage_findings.md): the reconstructed
+finding SHA-256 equals the approved input hash, the logical-export SHA-256 is
+`9f463dd96261d54673d88abd4f0213f5860381334fe07d19d4ec66a8eccd52e0`, two approved
+rules reconcile, and logical/reconstructed/query hashes match across the two
+imports.
+
+Those checks demonstrate storage consistency and deterministic preservation of the
+approved finding evidence. They do not confirm attacks, malicious activity,
+compromised hosts, incidents, detection accuracy, precision, recall, performance,
+or ground truth.

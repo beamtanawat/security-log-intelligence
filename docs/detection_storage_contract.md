@@ -45,6 +45,14 @@ Stage 1.4 detection evidence.
 - `finding_id` remains the Stage 1.4 deterministic finding identity. Stage 1.5 does
   not generate a replacement identity.
 - `summary_sha256` identifies the exact bounded Stage 1.4 summary bytes.
+- The approved Stage 1.4F summary is an exact validation envelope. Its
+  `primary_run` object is the strict `DetectionRunSummary` used for storage
+  reconciliation; `summary_sha256` still identifies the complete envelope bytes,
+  not a serialization of `primary_run`.
+- The strict reader also preserves its existing direct `DetectionRunSummary` input
+  shape for synthetic/public-contract fixtures. It dispatches only between that
+  exact flat shape and the exact Stage 1.4F envelope shape; arbitrary nested
+  summaries are rejected.
 - Logical content contains no import wall-clock timestamp or absolute local path.
 
 Stage 1.5 v1 is a **single-run, create-new-database** workflow. Deterministic

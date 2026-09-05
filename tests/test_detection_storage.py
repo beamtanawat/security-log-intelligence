@@ -317,6 +317,81 @@ def write_summary(path: Path, summary: DetectionRunSummary) -> bytes:
     return content
 
 
+def build_stage_1_4f_envelope(summary: DetectionRunSummary) -> dict[str, object]:
+    """Build the exact public Stage 1.4F validation-envelope shape synthetically."""
+
+    return {
+        "validation_stage": "1.4F",
+        "python_version": "Python 3.12.10",
+        "raw": {
+            "path": "data/raw/synthetic.csv",
+            "file_size_bytes_before": 1,
+            "file_size_bytes_after": 1,
+            "sha256_before": "0" * 64,
+            "sha256_after": "0" * 64,
+        },
+        "normalized_input": {
+            "path": "data/processed/synthetic_normalized_events.jsonl",
+            "file_size_bytes_before": 1,
+            "file_size_bytes_after": 1,
+            "sha256_before": "1" * 64,
+            "sha256_after": "1" * 64,
+        },
+        "primary_run": summary.to_dict(),
+        "primary_findings": {
+            "path": "data/processed/synthetic_findings.jsonl",
+            "file_size_bytes": 1,
+            "sha256": "2" * 64,
+        },
+        "primary_audit": {
+            "finding_count": summary.total_finding_count,
+            "findings_by_rule_id": dict(summary.findings_by_rule_id),
+            "findings_by_rule_severity": dict(summary.findings_by_rule_severity),
+            "sample_findings_by_rule": {
+                rule_id: [sample.to_dict() for sample in samples]
+                for rule_id, samples in summary.sample_findings_by_rule.items()
+            },
+            "unique_matched_source_record_count": (
+                summary.unique_matched_source_record_count
+            ),
+        },
+        "determinism": {
+            "secondary_findings_sha256": "2" * 64,
+            "hashes_match": True,
+            "temporary_findings_removed": True,
+        },
+        "validation_checks": {
+            "full_tests_before": "PASS",
+            "full_tests_after": "PASS",
+            "raw_processed_git_safety_before": "PASS",
+            "raw_processed_git_safety_after": "PASS",
+            "git_diff_check": "PASS",
+        },
+        "expected_reconciliation": {
+            "source_threat_observation_count": 0,
+            "anomaly_subtype_observation_count": 0,
+            "total_finding_count": summary.total_finding_count,
+            "unique_matched_source_record_count": (
+                summary.unique_matched_source_record_count
+            ),
+            "informational_finding_count": summary.total_finding_count,
+        },
+        "verdict": "PASS",
+    }
+
+
+def write_stage_1_4f_envelope(
+    path: Path,
+    summary: DetectionRunSummary,
+) -> tuple[bytes, dict[str, object]]:
+    """Write a synthetic exact-shape Stage 1.4F validation envelope."""
+
+    envelope = build_stage_1_4f_envelope(summary)
+    content = canonical_payload_bytes(envelope)
+    path.write_bytes(content)
+    return content, envelope
+
+
 def write_synthetic_artifacts(
     directory: Path,
     findings: tuple[DetectionFinding, ...],
@@ -642,6 +717,172 @@ class StorageInputValidationTests(unittest.TestCase):
         self.assertNotEqual(validated.run_id, validated.summary_sha256)
         self.assertEqual(validated.finding_count, 2)
         self.assertEqual(validated.evidence_count, 2)
+
+    def test_flat_detection_run_summary_remains_explicitly_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, identity, summary = write_synthetic_artifacts(
+                directory,
+                (build_stage_1_4_finding(1),),
+            )
+
+            validated = validate_detection_artifacts(
+                findings_path,
+                summary_path,
+                identity,
+            )
+
+        self.assertEqual(validated.summary, summary)
+
+    def test_stage_1_4f_envelope_reconstructs_primary_run_and_keeps_full_file_identity(
+        self,
+    ) -> None:
+        findings = (build_stage_1_4_finding(1),)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                findings,
+            )
+            envelope_bytes, _ = write_stage_1_4f_envelope(summary_path, summary)
+            identity = ApprovedArtifactIdentity(
+                findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                summary_sha256=sha256(envelope_bytes).hexdigest(),
+            )
+
+            validated = validate_detection_artifacts(
+                findings_path,
+                summary_path,
+                identity,
+            )
+
+        self.assertEqual(validated.summary, summary)
+        self.assertEqual(validated.summary_sha256, sha256(envelope_bytes).hexdigest())
+        self.assertNotEqual(
+            validated.summary_sha256,
+            sha256(canonical_payload_bytes(summary.to_dict())).hexdigest(),
+        )
+        self.assertEqual(validated.run_id, validated.findings_sha256)
+
+    def test_stage_1_4f_envelope_rejects_invalid_shape_or_nested_summary(self) -> None:
+        finding = build_stage_1_4_finding(1)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                (finding,),
+            )
+            cases: dict[str, tuple[dict[str, object], str]] = {}
+
+            missing_envelope_field = build_stage_1_4f_envelope(summary)
+            del missing_envelope_field["verdict"]
+            cases["missing_envelope_field"] = (
+                missing_envelope_field,
+                "SUMMARY_SCHEMA_MISMATCH",
+            )
+
+            unexpected_envelope_field = build_stage_1_4f_envelope(summary)
+            unexpected_envelope_field["unexpected"] = "value"
+            cases["unexpected_envelope_field"] = (
+                unexpected_envelope_field,
+                "SUMMARY_SCHEMA_MISMATCH",
+            )
+
+            missing_nested_envelope_field = build_stage_1_4f_envelope(summary)
+            del missing_nested_envelope_field["raw"]["sha256_before"]
+            cases["missing_nested_envelope_field"] = (
+                missing_nested_envelope_field,
+                "SUMMARY_ENVELOPE_INVALID",
+            )
+
+            invalid_validation_stage = build_stage_1_4f_envelope(summary)
+            invalid_validation_stage["validation_stage"] = "1.4E"
+            cases["invalid_validation_stage"] = (
+                invalid_validation_stage,
+                "SUMMARY_ENVELOPE_STAGE_INVALID",
+            )
+
+            non_passing_verdict = build_stage_1_4f_envelope(summary)
+            non_passing_verdict["verdict"] = "FAIL"
+            cases["non_passing_verdict"] = (
+                non_passing_verdict,
+                "SUMMARY_ENVELOPE_VERDICT_INVALID",
+            )
+
+            missing_primary_run_field = build_stage_1_4f_envelope(summary)
+            del missing_primary_run_field["primary_run"]["active_rules"]
+            cases["missing_primary_run_field"] = (
+                missing_primary_run_field,
+                "SUMMARY_SCHEMA_MISMATCH",
+            )
+
+            unexpected_primary_run_field = build_stage_1_4f_envelope(summary)
+            unexpected_primary_run_field["primary_run"]["unexpected"] = "value"
+            cases["unexpected_primary_run_field"] = (
+                unexpected_primary_run_field,
+                "SUMMARY_SCHEMA_MISMATCH",
+            )
+
+            non_object_primary_run = build_stage_1_4f_envelope(summary)
+            non_object_primary_run["primary_run"] = "not-an-object"
+            cases["non_object_primary_run"] = (
+                non_object_primary_run,
+                "SUMMARY_ENVELOPE_INVALID",
+            )
+
+            invalid_primary_run = build_stage_1_4f_envelope(summary)
+            invalid_primary_run["primary_run"]["finding_schema_version"] = "2.0"
+            cases["invalid_primary_run"] = (
+                invalid_primary_run,
+                "SUMMARY_CONTRACT_INVALID",
+            )
+
+            prohibited_primary_run = build_stage_1_4f_envelope(summary)
+            prohibited_primary_run["primary_run"]["is_attack"] = False
+            cases["prohibited_primary_run"] = (
+                prohibited_primary_run,
+                "PROHIBITED_DECISION_FIELD",
+            )
+
+            for name, (envelope, expected_code) in cases.items():
+                with self.subTest(name=name):
+                    content = canonical_payload_bytes(envelope)
+                    summary_path.write_bytes(content)
+                    identity = ApprovedArtifactIdentity(
+                        findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                        summary_sha256=sha256(content).hexdigest(),
+                    )
+
+                    with self.assertRaises(StorageInputValidationError) as context:
+                        validate_detection_artifacts(findings_path, summary_path, identity)
+
+                self.assertEqual(context.exception.code, expected_code)
+
+    def test_stage_1_4f_envelope_keeps_cross_artifact_reconciliation(self) -> None:
+        finding = build_stage_1_4_finding(1)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            findings_path, summary_path, _, summary = write_synthetic_artifacts(
+                directory,
+                (finding,),
+            )
+            envelope = build_stage_1_4f_envelope(summary)
+            primary_run = envelope["primary_run"]
+            self.assertIsInstance(primary_run, dict)
+            primary_run["total_finding_count"] = 2
+            primary_run["findings_by_rule_id"] = {finding.rule.rule_id: 2}
+            primary_run["findings_by_rule_severity"] = {finding.rule.severity: 2}
+            content = canonical_payload_bytes(envelope)
+            summary_path.write_bytes(content)
+            identity = ApprovedArtifactIdentity(
+                findings_sha256=sha256(findings_path.read_bytes()).hexdigest(),
+                summary_sha256=sha256(content).hexdigest(),
+            )
+
+            with self.assertRaises(StorageInputValidationError) as context:
+                validate_detection_artifacts(findings_path, summary_path, identity)
+
+        self.assertEqual(context.exception.code, "SUMMARY_FINDING_COUNT_MISMATCH")
 
     def test_summary_declared_future_rule_version_is_accepted(self) -> None:
         future_rule = FindingRuleReference(

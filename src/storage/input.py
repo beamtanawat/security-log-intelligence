@@ -81,6 +81,94 @@ _SUMMARY_KEYS = frozenset(
         "active_rules",
     }
 )
+_STAGE_1_4F_ENVELOPE_KEYS = frozenset(
+    {
+        "validation_stage",
+        "python_version",
+        "raw",
+        "normalized_input",
+        "primary_run",
+        "primary_findings",
+        "primary_audit",
+        "determinism",
+        "validation_checks",
+        "expected_reconciliation",
+        "verdict",
+    }
+)
+_STAGE_1_4F_ENVELOPE_NESTED_KEYS = (
+    (
+        "raw",
+        frozenset(
+            {
+                "path",
+                "file_size_bytes_before",
+                "file_size_bytes_after",
+                "sha256_before",
+                "sha256_after",
+            }
+        ),
+    ),
+    (
+        "normalized_input",
+        frozenset(
+            {
+                "path",
+                "file_size_bytes_before",
+                "file_size_bytes_after",
+                "sha256_before",
+                "sha256_after",
+            }
+        ),
+    ),
+    ("primary_findings", frozenset({"path", "file_size_bytes", "sha256"})),
+    (
+        "primary_audit",
+        frozenset(
+            {
+                "finding_count",
+                "findings_by_rule_id",
+                "findings_by_rule_severity",
+                "sample_findings_by_rule",
+                "unique_matched_source_record_count",
+            }
+        ),
+    ),
+    (
+        "determinism",
+        frozenset(
+            {
+                "secondary_findings_sha256",
+                "hashes_match",
+                "temporary_findings_removed",
+            }
+        ),
+    ),
+    (
+        "validation_checks",
+        frozenset(
+            {
+                "full_tests_before",
+                "full_tests_after",
+                "raw_processed_git_safety_before",
+                "raw_processed_git_safety_after",
+                "git_diff_check",
+            }
+        ),
+    ),
+    (
+        "expected_reconciliation",
+        frozenset(
+            {
+                "source_threat_observation_count",
+                "anomaly_subtype_observation_count",
+                "total_finding_count",
+                "unique_matched_source_record_count",
+                "informational_finding_count",
+            }
+        ),
+    ),
+)
 _ACTIVE_RULE_KEYS = frozenset({"rule_id", "version"})
 _FINDING_SAMPLE_KEYS = frozenset({"finding_id", "source_record_number"})
 _PROHIBITED_DECISION_KEYS = frozenset(
@@ -418,15 +506,8 @@ def _as_detection_finding(payload: object, line_number: int) -> DetectionFinding
         ) from error
 
 
-def _as_detection_summary(payload: object) -> DetectionRunSummary:
-    """Strictly reconstruct the bounded public Stage 1.4 run summary."""
-
-    prohibited_key = _prohibited_decision_key(payload)
-    if prohibited_key is not None:
-        raise StorageInputValidationError(
-            "PROHIBITED_DECISION_FIELD",
-            "Detection summary contains a prohibited security-decision field.",
-        )
+def _as_flat_detection_summary(payload: object) -> DetectionRunSummary:
+    """Strictly reconstruct one direct DetectionRunSummary JSON object."""
 
     summary_data = _require_exact_object(
         payload,
@@ -518,6 +599,59 @@ def _as_detection_summary(payload: object) -> DetectionRunSummary:
             "SUMMARY_CONTRACT_INVALID",
             "Detection summary does not satisfy the Stage 1.4 contract.",
         ) from error
+
+
+def _as_stage_1_4f_envelope(payload: Mapping[str, object]) -> DetectionRunSummary:
+    """Extract the strict public run summary from an exact Stage 1.4F envelope."""
+
+    envelope = _require_exact_object(
+        payload,
+        _STAGE_1_4F_ENVELOPE_KEYS,
+        "Stage 1.4F validation envelope",
+        code="SUMMARY_SCHEMA_MISMATCH",
+    )
+    if envelope["validation_stage"] != "1.4F":
+        raise StorageInputValidationError(
+            "SUMMARY_ENVELOPE_STAGE_INVALID",
+            "Stage 1.4F validation envelope must declare validation_stage '1.4F'.",
+        )
+    if envelope["verdict"] != "PASS":
+        raise StorageInputValidationError(
+            "SUMMARY_ENVELOPE_VERDICT_INVALID",
+            "Stage 1.4F validation envelope must declare verdict 'PASS'.",
+        )
+    if not isinstance(envelope["python_version"], str) or not envelope["python_version"]:
+        raise StorageInputValidationError(
+            "SUMMARY_ENVELOPE_INVALID",
+            "Stage 1.4F validation envelope python_version must be non-empty text.",
+        )
+    for key, expected_keys in _STAGE_1_4F_ENVELOPE_NESTED_KEYS:
+        _require_exact_object(
+            envelope[key],
+            expected_keys,
+            f"Stage 1.4F validation envelope {key}",
+            code="SUMMARY_ENVELOPE_INVALID",
+        )
+    if not isinstance(envelope["primary_run"], Mapping):
+        raise StorageInputValidationError(
+            "SUMMARY_ENVELOPE_INVALID",
+            "Stage 1.4F validation envelope primary_run must be a JSON object.",
+        )
+    return _as_flat_detection_summary(envelope["primary_run"])
+
+
+def _as_detection_summary(payload: object) -> DetectionRunSummary:
+    """Strictly reconstruct a direct summary or exact approved Stage 1.4F envelope."""
+
+    prohibited_key = _prohibited_decision_key(payload)
+    if prohibited_key is not None:
+        raise StorageInputValidationError(
+            "PROHIBITED_DECISION_FIELD",
+            "Detection summary contains a prohibited security-decision field.",
+        )
+    if isinstance(payload, Mapping) and set(payload) == _STAGE_1_4F_ENVELOPE_KEYS:
+        return _as_stage_1_4f_envelope(payload)
+    return _as_flat_detection_summary(payload)
 
 
 def _read_summary(

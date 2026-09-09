@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from contextlib import contextmanager
+from dataclasses import replace
 import inspect
 import json
 import os
@@ -21,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from api import ApiSettings, ApiSettingsError, create_app  # noqa: E402
+from api import app as api_app  # noqa: E402
 from api import bridge as api_bridge  # noqa: E402
 from api.bridge import ApiStartupError, verify_startup_store  # noqa: E402
 from detection.models import (  # noqa: E402
@@ -35,8 +37,10 @@ from detection.models import (  # noqa: E402
 )
 from detection.rules import ACTIVE_RULES  # noqa: E402
 from storage import (  # noqa: E402
+    FindingQuery,
     StorageAuditError,
     import_detection_run,
+    list_findings,
 )
 from storage import audit as storage_audit  # noqa: E402
 from storage import importer as storage_importer  # noqa: E402
@@ -56,18 +60,29 @@ def _canonical_json_bytes(value: object) -> bytes:
     )
 
 
-def _build_finding(record_number: int = 1) -> DetectionFinding:
-    metadata = ACTIVE_RULES[0].metadata
+_DEFAULT_SOURCE_IDENTIFIER = object()
+
+
+def _build_finding(
+    record_number: int = 1,
+    *,
+    rule_index: int = 0,
+    source_record_id: str | None | object = _DEFAULT_SOURCE_IDENTIFIER,
+    observed_value: object = "synthetic-source-observation",
+) -> DetectionFinding:
+    metadata = ACTIVE_RULES[rule_index].metadata
     rule = FindingRuleReference.from_metadata(metadata)
+    if source_record_id is _DEFAULT_SOURCE_IDENTIFIER:
+        source_record_id = f"LOGUID_OPAQUE_{record_number}"
     source_event = SourceEventReference(
         source_type="fortigate",
         normalized_schema_version="1.0",
         source_record_number=record_number,
-        source_record_id=f"LOGUID_OPAQUE_{record_number}",
+        source_record_id=source_record_id,
     )
     evidence = DetectionEvidence(
         canonical_path=metadata.evidence_paths[0],
-        observed_value="synthetic-source-observation",
+        observed_value=observed_value,
         source_fields=("event_subtype",),
         mapping_operation="COPIED",
         interpretation_status="VERIFIED",
@@ -194,7 +209,7 @@ def _stage_1_4f_envelope(summary: DetectionRunSummary) -> dict[str, object]:
 
 
 @contextmanager
-def _synthetic_store() -> object:
+def _synthetic_store(findings: tuple[DetectionFinding, ...] | None = None) -> object:
     """Create one isolated Stage 1.5 store and matching Stage 1.4F artifacts."""
 
     with tempfile.TemporaryDirectory() as temporary_directory:
@@ -202,7 +217,17 @@ def _synthetic_store() -> object:
             Path(temporary_directory) / "project" / "data" / "processed"
         )
         processed_directory.mkdir(parents=True)
-        findings = (_build_finding(),)
+        if findings is None:
+            findings = (_build_finding(),)
+        findings = tuple(
+            sorted(
+                findings,
+                key=lambda finding: (
+                    finding.source_event.source_record_number,
+                    finding.rule.rule_id,
+                ),
+            )
+        )
         findings_path = processed_directory / "synthetic_findings.jsonl"
         findings_path.write_bytes(
             b"".join(_canonical_json_bytes(finding.to_dict()) for finding in findings)
@@ -430,7 +455,259 @@ class ApiLifecycleTests(unittest.TestCase):
         self.assertNotIn("import_detection_run", bridge_source)
         self.assertNotIn("sqlite3", bridge_source)
         self.assertNotIn("check_same_thread=False", bridge_source)
-        self.assertNotIn("/api/v1/runs", app_source)
+        self.assertNotIn("sqlite3", app_source)
+        self.assertNotIn("storage.query", app_source)
+        self.assertNotIn("storage.schema", app_source)
+        self.assertNotIn("serve_api", app_source)
+        self.assertNotIn("validate_api", app_source)
+
+
+class ApiFindingRouteTests(unittest.TestCase):
+    """Synthetic contract tests for the Stage 1.6C findings routes."""
+
+    def _findings(self) -> tuple[DetectionFinding, ...]:
+        return (
+            _build_finding(1, rule_index=0),
+            _build_finding(1, rule_index=1),
+            _build_finding(
+                2,
+                rule_index=0,
+                source_record_id=None,
+                observed_value={"nested": ["evidence", {"count": 2}]},
+            ),
+        )
+
+    def _list_path(self, run_id: str) -> str:
+        return f"/api/v1/runs/{run_id}/findings"
+
+    def _detail_path(self, run_id: str, finding_id: str) -> str:
+        return f"{self._list_path(run_id)}/{finding_id}"
+
+    def test_list_defaults_limits_order_and_no_pagination_claim(self) -> None:
+        findings = self._findings()
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            with TestClient(create_app(_settings(fixture))) as client:
+                default_response = client.get(self._list_path(run_id))
+                minimum_response = client.get(self._list_path(run_id), params={"limit": "1"})
+                maximum_response = client.get(self._list_path(run_id), params={"limit": "500"})
+
+        self.assertEqual(default_response.status_code, 200)
+        self.assertEqual(minimum_response.status_code, 200)
+        self.assertEqual(maximum_response.status_code, 200)
+        default_payload = default_response.json()
+        self.assertEqual(default_payload["limit"], 50)
+        self.assertEqual(default_payload["returned_count"], 3)
+        expected_findings = sorted(
+            findings,
+            key=lambda finding: (
+                finding.source_event.source_record_number,
+                finding.rule.rule_id,
+                finding.rule.version,
+                finding.finding_id,
+            ),
+        )
+        self.assertEqual(
+            default_payload["items"],
+            [finding.to_dict() for finding in expected_findings],
+        )
+        same_source_record = [
+            item
+            for item in default_payload["items"]
+            if item["source_event"]["source_record_number"] == 1
+        ]
+        self.assertEqual(len(same_source_record), 2)
+        self.assertNotEqual(
+            same_source_record[0]["rule"]["rule_id"],
+            same_source_record[1]["rule"]["rule_id"],
+        )
+        self.assertEqual(minimum_response.json()["returned_count"], 1)
+        self.assertEqual(maximum_response.json()["limit"], 500)
+        self.assertEqual(maximum_response.json()["returned_count"], 3)
+        self.assertEqual(
+            set(default_payload),
+            {"api_version", "run_id", "limit", "returned_count", "items"},
+        )
+        self.assertFalse({"total", "filtered_total", "next_cursor", "has_more", "is_complete"} & set(default_payload))
+
+    def test_list_supports_each_filter_combined_filter_and_valid_no_match(self) -> None:
+        findings = self._findings()
+        first, second, third = findings
+        filters = {
+            "finding_id": first.finding_id,
+            "rule_id": first.rule.rule_id,
+            "rule_version": first.rule.version,
+            "severity": first.rule.severity,
+            "reason_code": first.reason_code,
+            "source_type": first.source_event.source_type,
+            "source_record_number": str(first.source_event.source_record_number),
+            "evidence_path": first.evidence[0].canonical_path,
+        }
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            with TestClient(create_app(_settings(fixture))) as client:
+                for name, value in filters.items():
+                    with self.subTest(name=name):
+                        response = client.get(self._list_path(run_id), params={name: value})
+                        self.assertEqual(response.status_code, 200)
+                        self.assertGreaterEqual(response.json()["returned_count"], 1)
+                combined = client.get(
+                    self._list_path(run_id),
+                    params={
+                        "rule_id": first.rule.rule_id,
+                        "source_record_number": str(first.source_event.source_record_number),
+                    },
+                )
+                no_match = client.get(
+                    self._list_path(run_id), params={"source_type": "unmatched-source"}
+                )
+                sql_text = client.get(
+                    self._list_path(run_id),
+                    params={"source_type": "fortigate' OR 1=1 --"},
+                )
+
+        self.assertEqual(combined.status_code, 200)
+        self.assertEqual(combined.json()["returned_count"], 1)
+        self.assertEqual(combined.json()["items"][0]["finding_id"], first.finding_id)
+        self.assertEqual(no_match.status_code, 200)
+        self.assertEqual(no_match.json()["returned_count"], 0)
+        self.assertEqual(no_match.json()["items"], [])
+        self.assertEqual(sql_text.status_code, 200)
+        self.assertEqual(sql_text.json()["items"], [])
+        self.assertNotEqual(second.finding_id, third.finding_id)
+
+    def test_list_rejects_unknown_duplicate_blank_and_invalid_values(self) -> None:
+        with _synthetic_store(self._findings()) as fixture:
+            run_id = str(fixture["run_id"])
+            path = self._list_path(run_id)
+            with TestClient(create_app(_settings(fixture))) as client:
+                invalid_limits = ("0", "501", "+1", " 1", "1.0", "1e1", "true")
+                for value in invalid_limits:
+                    with self.subTest(limit=value):
+                        response = client.get(path, params={"limit": value})
+                        self.assertEqual(response.status_code, 422)
+                invalid_record_numbers = ("0", "-1", "1.0", "1e1", "true", "9223372036854775808")
+                for value in invalid_record_numbers:
+                    with self.subTest(source_record_number=value):
+                        response = client.get(path, params={"source_record_number": value})
+                        self.assertEqual(response.status_code, 422)
+                responses = (
+                    client.get(path, params={"unexpected": "value"}),
+                    client.get(f"{path}?limit=1&limit=2"),
+                    client.get(path, params={"source_type": ""}),
+                    client.get(path, params={"severity": "CRITICAL"}),
+                )
+
+        for response in responses:
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
+            self.assertNotIn("value", response.text)
+
+    def test_list_is_bounded_when_synthetic_store_has_more_than_500_matches(self) -> None:
+        findings = tuple(_build_finding(record_number) for record_number in range(1, 502))
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            with TestClient(create_app(_settings(fixture))) as client:
+                default_response = client.get(self._list_path(run_id))
+                maximum_response = client.get(self._list_path(run_id), params={"limit": "500"})
+
+        self.assertEqual(default_response.status_code, 200)
+        self.assertEqual(default_response.json()["returned_count"], 50)
+        self.assertEqual(maximum_response.status_code, 200)
+        self.assertEqual(maximum_response.json()["returned_count"], 500)
+        self.assertEqual(maximum_response.json()["limit"], 500)
+        self.assertNotIn("has_more", maximum_response.json())
+
+    def test_detail_preserves_complete_canonical_finding_values(self) -> None:
+        findings = self._findings()
+        optional_finding = findings[2]
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            with TestClient(create_app(_settings(fixture))) as client:
+                response = client.get(self._detail_path(run_id, optional_finding.finding_id))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["finding"], optional_finding.to_dict())
+        self.assertIsNone(payload["finding"]["source_event"]["source_record_id"])
+        self.assertEqual(
+            payload["finding"]["evidence"][0]["observed_value"],
+            {"nested": ["evidence", {"count": 2}]},
+        )
+
+    def test_detail_and_run_scope_errors_do_not_query_other_runs(self) -> None:
+        findings = self._findings()
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            path = self._detail_path(run_id, findings[0].finding_id)
+            with TestClient(create_app(_settings(fixture))) as client:
+                valid = client.get(path)
+                unknown = client.get(self._detail_path(run_id, "e" * 64))
+                malformed_run = client.get(self._detail_path("bad", findings[0].finding_id))
+                malformed_finding = client.get(self._detail_path(run_id, "bad"))
+                with patch.object(api_app, "get_finding") as finding_lookup:
+                    wrong_run = client.get(self._detail_path("f" * 64, findings[0].finding_id))
+                finding_lookup.assert_not_called()
+                with patch.object(api_app, "list_findings") as findings_lookup:
+                    wrong_run_list = client.get(self._list_path("f" * 64))
+                findings_lookup.assert_not_called()
+                extra_query = client.get(f"{path}?limit=1")
+
+        self.assertEqual(valid.status_code, 200)
+        self.assertEqual(unknown.status_code, 404)
+        self.assertEqual(unknown.json()["error"]["code"], "FINDING_NOT_FOUND")
+        self.assertEqual(wrong_run.status_code, 404)
+        self.assertEqual(wrong_run.json()["error"]["code"], "RUN_NOT_FOUND")
+        self.assertEqual(wrong_run_list.status_code, 404)
+        self.assertEqual(wrong_run_list.json()["error"]["code"], "RUN_NOT_FOUND")
+        self.assertEqual(malformed_run.status_code, 422)
+        self.assertEqual(malformed_finding.status_code, 422)
+        self.assertEqual(extra_query.status_code, 422)
+
+    def test_identity_guard_and_impossible_finding_run_mismatch_fail_closed(self) -> None:
+        findings = self._findings()
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            database_path = Path(fixture["database_path"])
+            with TestClient(create_app(_settings(fixture))) as client:
+                before = database_path.stat()
+                os.utime(
+                    database_path,
+                    ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+                )
+                changed_response = client.get(self._list_path(run_id))
+
+        self.assertEqual(changed_response.status_code, 503)
+        self.assertEqual(changed_response.json()["error"]["code"], "STORE_UNAVAILABLE")
+
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            database_path = Path(fixture["database_path"])
+            stored = list_findings(database_path, FindingQuery(run_id=run_id, limit=1))[0]
+            inconsistent = replace(stored, run_id="b" * 64)
+            with patch.object(api_app, "list_findings", return_value=(inconsistent,)):
+                with TestClient(create_app(_settings(fixture))) as client:
+                    mismatch_response = client.get(self._list_path(run_id))
+
+        self.assertEqual(mismatch_response.status_code, 503)
+        self.assertEqual(mismatch_response.json()["error"]["code"], "STORE_UNAVAILABLE")
+
+    def test_list_and_detail_response_bodies_are_deterministic(self) -> None:
+        findings = self._findings()
+        with _synthetic_store(findings) as fixture:
+            run_id = str(fixture["run_id"])
+            list_path = self._list_path(run_id)
+            detail_path = self._detail_path(run_id, findings[0].finding_id)
+            with TestClient(create_app(_settings(fixture))) as client:
+                first_list = client.get(list_path)
+                second_list = client.get(list_path)
+                first_detail = client.get(detail_path)
+                second_detail = client.get(detail_path)
+
+        self.assertEqual(first_list.status_code, 200)
+        self.assertEqual(first_list.content, second_list.content)
+        self.assertEqual(first_detail.status_code, 200)
+        self.assertEqual(first_detail.content, second_detail.content)
 
 
 if __name__ == "__main__":

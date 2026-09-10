@@ -1,11 +1,11 @@
 # Read-Only Detection Findings API Contract
 
-**Status:** Stage 1.6A contract baseline — planned, not implemented.
+**Status:** Stage 1.6 contract updated for Checkpoint 1.6E; local runtime
+validation remains a checkpoint gate.
 
 This document records the verified Stage 1.5 storage boundary and the
-contract a later Stage 1.6 implementation must satisfy. It does not add an
-HTTP server, install a dependency, open a listening port, or change a stored
-database.
+implemented Stage 1.6 contract. It specifies a local read-only API and its
+fixed-loopback launcher; it does not change a stored database.
 
 ## Scope and non-security-decision boundary
 
@@ -438,37 +438,73 @@ The service may only open the pre-verified SQLite database using the existing
 read-only query functions. It must not create a SQLite journal, WAL, SHM, or
 any other sidecar file.
 
-## Dependency proposal — not installed
+## Approved dependency state
 
-No dependency is installed and neither requirements file is changed by
-Checkpoint 1.6A. The following exact pins are a proposal for a later approved
-implementation and local compatibility validation on Python 3.12:
+The approved exact pins are recorded in the repository requirements files.
+They were installed and locally compatibility-validated for the implemented
+Stage 1.6 application checkpoints on Python 3.12.10. Checkpoint 1.6E changes
+neither pin nor installation state; its own runtime gate still requires a
+fresh `pip check` and complete test-suite result.
 
-**Dependency approval status:** REQUIRED. No approval to edit requirements
-files or install packages has been granted by this contract checkpoint.
-
-**Dependency state:** PROPOSED / NOT INSTALLED / LOCAL COMPATIBILITY NOT YET
-VERIFIED.
-
-| Group | Proposed pin | Purpose | Status |
+| Group | Exact pin | Purpose | Current state |
 | --- | --- | --- | --- |
-| runtime | [`fastapi==0.141.1`](https://pypi.org/project/fastapi/) | typed ASGI routing and OpenAPI JSON generation | NOT INSTALLED |
-| runtime | [`uvicorn==0.52.4`](https://pypi.org/project/uvicorn/) | local ASGI server | NOT INSTALLED |
-| development | [`httpx==0.28.1`](https://pypi.org/project/httpx/) | in-process HTTP contract tests | NOT INSTALLED |
-| development | [`pytest==9.1.1`](https://pypi.org/project/pytest/) | API-focused test runner, if approved alongside the existing suite | NOT INSTALLED |
+| runtime | `fastapi==0.141.1` | typed ASGI routing and OpenAPI JSON generation | approved / installed |
+| runtime | `uvicorn==0.52.4` | fixed-local ASGI server | approved / installed |
+| development | `httpx==0.28.1` | in-process HTTP contract tests | approved / installed |
+| development | `pytest==9.1.1` | API-focused test runner | approved / installed |
 
-The version proposal is based only on current published Python-version
-metadata, not an installed or resolved local environment. Adding pins to a
-requirements file, installing them, or asserting dependency compatibility
-requires explicit dependency approval and a later local `pip check` plus the
-approved test gate.
+No new dependency is required for the launcher. A later checkpoint must not
+silently update, install, or replace these pins.
 
-## Verification required before implementation
+## Local launcher contract
 
-Checkpoint 1.6A is documentation and static interface reconciliation only.
-Before any API code may be accepted, later checkpoints must obtain local
-evidence that the approved Python 3.12 environment can install the approved
-pins, pass dependency resolution checks, run the existing suite unchanged,
-and pass the new synthetic API/security tests. Any optional real-data API
-validation must use only the approved Stage 1.4 artifacts and an ignored,
-pre-existing Stage 1.5 SQLite database.
+`src/serve_api.py` is the only Stage 1.6E launcher. It accepts the explicit
+operator inputs below and does not infer paths from the current working
+directory:
+
+```text
+--database PATH
+--findings PATH
+--summary PATH
+--expected-run-id SHA256
+--port PORT  (optional; ApiSettings supplies the validated default of 8000)
+```
+
+It offers no host, reload, worker-count, proxy, forwarded-header, TLS, or
+database-creation option. The launcher constructs `ApiSettings` before it
+constructs the application or requests a socket. Invalid command arguments,
+run identifiers, and port values therefore fail before application factory or
+server startup. The parser exits nonzero; it does not select an alternate port
+or retry on another interface.
+
+For valid settings, the launcher uses exactly the existing lifecycle:
+
+```text
+ApiSettings -> create_app(settings) -> uvicorn.run(application)
+```
+
+The Uvicorn call fixes `host="127.0.0.1"`, passes `settings.port`, uses one
+worker, and sets `reload=False`, `proxy_headers=False`, `access_log=False`, and
+`log_level="critical"`. A failed Uvicorn startup preserves its nonzero exit
+code while the launcher emits only `API_STARTUP_FAILED`; it does not retry or
+fall back to another host or port. Importing the launcher does not construct an
+application, access storage, read an artifact, or start a server. Startup and
+shutdown validation remain owned by the existing FastAPI lifespan and public
+Stage 1.5 bridge; the launcher does not open SQLite, import data, read raw CSV,
+or read normalized-event JSONL.
+
+The documented local command is:
+
+```powershell
+& .\.venv\Scripts\python.exe .\src\serve_api.py `
+  --database <approved-store-path> `
+  --findings <approved-findings-path> `
+  --summary <approved-summary-path> `
+  --expected-run-id <approved-lowercase-run-id> `
+  --port 8000
+```
+
+The command is local-only. It does not authenticate a local user or protect
+against a privileged local process. Its synthetic loopback tests use only
+temporary fixtures; real-store API validation remains a separate Checkpoint
+1.6F gate.

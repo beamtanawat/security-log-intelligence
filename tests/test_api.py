@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import ast
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from dataclasses import replace
+from http.client import HTTPConnection
+import importlib.util
 import inspect
+from io import StringIO
 import json
 import os
 from pathlib import Path
+import socket
 import sqlite3
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import uvicorn
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +33,7 @@ from api import ApiSettings, ApiSettingsError, create_app  # noqa: E402
 from api import app as api_app  # noqa: E402
 from api import bridge as api_bridge  # noqa: E402
 from api.bridge import ApiStartupError, verify_startup_store  # noqa: E402
+import serve_api  # noqa: E402
 from detection.models import (  # noqa: E402
     ActiveRuleVersion,
     DetectionEvidence,
@@ -965,6 +974,387 @@ class ApiHttpSafetyTests(unittest.TestCase):
         for forbidden_text in ("RuntimeError", "private", "SELECT", "Traceback"):
             self.assertNotIn(forbidden_text, first_internal.text)
         self.assertNotIn("NaN", nonfinite_internal.text)
+
+
+class ApiLauncherTests(unittest.TestCase):
+    """Synthetic Stage 1.6E tests for the fixed-local launcher."""
+
+    @staticmethod
+    def _launcher_arguments(
+        *,
+        database_path: Path = Path("synthetic/store.sqlite3"),
+        findings_path: Path = Path("synthetic/findings.jsonl"),
+        summary_path: Path = Path("synthetic/summary.json"),
+        run_id: str = "a" * 64,
+        port: int | None = 8123,
+    ) -> list[str]:
+        arguments = [
+            "--database",
+            str(database_path),
+            "--findings",
+            str(findings_path),
+            "--summary",
+            str(summary_path),
+            "--expected-run-id",
+            run_id,
+        ]
+        if port is not None:
+            arguments.extend(("--port", str(port)))
+        return arguments
+
+    @staticmethod
+    def _loopback_request(
+        port: int,
+        method: str,
+        target: str,
+    ) -> tuple[int, dict[str, str], bytes]:
+        connection = HTTPConnection("127.0.0.1", port, timeout=2)
+        try:
+            connection.request(method, target, headers={"Host": "127.0.0.1"})
+            response = connection.getresponse()
+            return (
+                response.status,
+                {name.lower(): value for name, value in response.getheaders()},
+                response.read(),
+            )
+        finally:
+            connection.close()
+
+    def test_launcher_import_is_side_effect_free(self) -> None:
+        module_name = "_serve_api_import_safety_probe"
+        specification = importlib.util.spec_from_file_location(
+            module_name,
+            PROJECT_ROOT / "src" / "serve_api.py",
+        )
+        self.assertIsNotNone(specification)
+        self.assertIsNotNone(specification.loader)
+        assert specification is not None
+        assert specification.loader is not None
+        module = importlib.util.module_from_spec(specification)
+        sys.modules[module_name] = module
+        try:
+            with (
+                patch.object(uvicorn, "run") as server_start,
+                patch("api.create_app") as application_factory,
+            ):
+                specification.loader.exec_module(module)
+            server_start.assert_not_called()
+            application_factory.assert_not_called()
+            self.assertTrue(callable(module.main))
+        finally:
+            sys.modules.pop(module_name, None)
+
+    def test_launcher_uses_explicit_settings_and_fixed_uvicorn_options(self) -> None:
+        application = object()
+        arguments = self._launcher_arguments(port=8123)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "WEB_CONCURRENCY": "99",
+                    "FORWARDED_ALLOW_IPS": "*",
+                    "UVICORN_HOST": "0.0.0.0",
+                },
+            ),
+            patch.object(serve_api, "create_app", return_value=application) as factory,
+            patch.object(serve_api.uvicorn, "run") as server_start,
+        ):
+            result = serve_api.main(arguments)
+
+        self.assertEqual(result, 0)
+        factory.assert_called_once()
+        settings = factory.call_args.args[0]
+        self.assertIsInstance(settings, ApiSettings)
+        self.assertEqual(settings.database_path, Path("synthetic/store.sqlite3"))
+        self.assertEqual(settings.findings_path, Path("synthetic/findings.jsonl"))
+        self.assertEqual(settings.summary_path, Path("synthetic/summary.json"))
+        self.assertEqual(settings.expected_run_id, "a" * 64)
+        self.assertEqual(settings.port, 8123)
+        server_start.assert_called_once_with(
+            application,
+            host="127.0.0.1",
+            port=8123,
+            reload=False,
+            workers=1,
+            proxy_headers=False,
+            access_log=False,
+            log_level="critical",
+        )
+
+        with (
+            patch.object(serve_api, "create_app", return_value=application) as factory,
+            patch.object(serve_api.uvicorn, "run") as server_start,
+        ):
+            result = serve_api.main(self._launcher_arguments(port=None))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(factory.call_args.args[0].port, 8000)
+        self.assertEqual(server_start.call_args.kwargs["port"], 8000)
+
+    def test_launcher_rejects_invalid_or_unapproved_options_before_startup(self) -> None:
+        missing_database = self._launcher_arguments()
+        del missing_database[:2]
+        cases = {
+            "missing database": missing_database,
+            "invalid run id": self._launcher_arguments(run_id="A" * 64),
+            "zero port": self._launcher_arguments(port=0),
+            "out of range port": self._launcher_arguments(port=65_536),
+            "noninteger port": self._launcher_arguments()[:-1] + ["not-an-integer"],
+            "host option": self._launcher_arguments() + ["--host", "0.0.0.0"],
+            "reload option": self._launcher_arguments() + ["--reload"],
+            "workers option": self._launcher_arguments() + ["--workers", "2"],
+            "proxy option": self._launcher_arguments() + ["--proxy-headers"],
+            "database create option": self._launcher_arguments() + ["--create-database"],
+        }
+        for name, arguments in cases.items():
+            with self.subTest(option=name):
+                with (
+                    patch.object(serve_api, "create_app") as factory,
+                    patch.object(serve_api.uvicorn, "run") as server_start,
+                    redirect_stderr(StringIO()) as standard_error,
+                    self.assertRaises(SystemExit) as exited,
+                ):
+                    serve_api.main(arguments)
+                self.assertEqual(exited.exception.code, 2)
+                self.assertIn("error:", standard_error.getvalue())
+                factory.assert_not_called()
+                server_start.assert_not_called()
+
+    def test_launcher_reports_startup_failure_without_retry_or_fallback(self) -> None:
+        application = object()
+        with (
+            patch.object(serve_api, "create_app", return_value=application),
+            patch.object(
+                serve_api.uvicorn,
+                "run",
+                side_effect=SystemExit(1),
+            ) as server_start,
+            redirect_stderr(StringIO()) as standard_error,
+        ):
+            result = serve_api.main(self._launcher_arguments(port=8123))
+
+        self.assertEqual(result, 1)
+        self.assertEqual(standard_error.getvalue(), "API_STARTUP_FAILED\n")
+        server_start.assert_called_once_with(
+            application,
+            host="127.0.0.1",
+            port=8123,
+            reload=False,
+            workers=1,
+            proxy_headers=False,
+            access_log=False,
+            log_level="critical",
+        )
+
+    def test_launcher_reports_port_in_use_without_rebinding(self) -> None:
+        application = object()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied_socket:
+            occupied_socket.bind(("127.0.0.1", 0))
+            occupied_socket.listen(1)
+            occupied_port = int(occupied_socket.getsockname()[1])
+
+            def port_in_use(_application: object, **configuration: object) -> None:
+                self.assertEqual(configuration["host"], "127.0.0.1")
+                self.assertEqual(configuration["port"], occupied_port)
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as competing_socket:
+                    with self.assertRaises(OSError):
+                        competing_socket.bind(("127.0.0.1", occupied_port))
+                raise SystemExit(1)
+
+            with (
+                patch.object(serve_api, "create_app", return_value=application),
+                patch.object(
+                    serve_api.uvicorn,
+                    "run",
+                    side_effect=port_in_use,
+                ) as server_start,
+                redirect_stderr(StringIO()) as standard_error,
+            ):
+                result = serve_api.main(self._launcher_arguments(port=occupied_port))
+
+        self.assertEqual(result, 1)
+        self.assertEqual(standard_error.getvalue(), "API_STARTUP_FAILED\n")
+        self.assertEqual(server_start.call_count, 1)
+
+    def test_launcher_configuration_is_offline_before_owned_server_startup(self) -> None:
+        application = object()
+        with (
+            patch.object(serve_api, "create_app", return_value=application),
+            patch.object(serve_api.uvicorn, "run") as server_start,
+            patch(
+                "socket.create_connection",
+                side_effect=AssertionError("launcher must not make an outbound connection"),
+            ) as create_connection,
+        ):
+            result = serve_api.main(self._launcher_arguments())
+
+        self.assertEqual(result, 0)
+        server_start.assert_called_once()
+        create_connection.assert_not_called()
+
+    def test_launcher_has_no_direct_storage_or_data_access(self) -> None:
+        source = inspect.getsource(serve_api)
+        tree = ast.parse(source)
+        imported_modules = {
+            alias.name.split(".", 1)[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        imported_modules.update(
+            node.module.split(".", 1)[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        )
+        self.assertNotIn("sqlite3", imported_modules)
+        self.assertNotIn("storage", imported_modules)
+        self.assertFalse(
+            imported_modules
+            & {"http", "httpx", "requests", "socket", "subprocess", "urllib"}
+        )
+
+        direct_data_calls = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr
+            in {"connect", "open", "read_bytes", "read_text", "write_bytes", "write_text"}
+        }
+        direct_data_calls.update(
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "open"
+        )
+        self.assertEqual(direct_data_calls, set())
+        source_strings = {
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertFalse(
+            any(
+                forbidden in value
+                for value in source_strings
+                for forbidden in (
+                    "data/raw",
+                    "network_log_SAFE.csv",
+                    "stage_1_3f_normalized_events.jsonl",
+                )
+            )
+        )
+
+    def test_launcher_runs_controlled_synthetic_loopback_smoke_and_cleans_up(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as owned_socket:
+            owned_socket.bind(("127.0.0.1", 0))
+            owned_socket.listen(1)
+            owned_socket.setblocking(False)
+            port = int(owned_socket.getsockname()[1])
+            with _synthetic_store() as fixture:
+                arguments = self._launcher_arguments(
+                    database_path=Path(fixture["database_path"]),
+                    findings_path=Path(fixture["findings_path"]),
+                    summary_path=Path(fixture["summary_path"]),
+                    run_id=str(fixture["run_id"]),
+                    port=port,
+                )
+                server_thread: threading.Thread | None = None
+                server: uvicorn.Server | None = None
+                server_failures: list[BaseException] = []
+
+                def run_owned_server(application: object, **configuration: object) -> None:
+                    nonlocal server, server_thread
+                    self.assertEqual(configuration["host"], "127.0.0.1")
+                    self.assertEqual(configuration["port"], port)
+                    self.assertEqual(configuration["reload"], False)
+                    self.assertEqual(configuration["workers"], 1)
+                    self.assertEqual(configuration["proxy_headers"], False)
+                    self.assertEqual(configuration["access_log"], False)
+                    self.assertEqual(configuration["log_level"], "critical")
+                    config = uvicorn.Config(
+                        application,
+                        host="127.0.0.1",
+                        port=port,
+                        reload=False,
+                        workers=1,
+                        proxy_headers=False,
+                        access_log=False,
+                        log_config=None,
+                        log_level="critical",
+                    )
+                    server = uvicorn.Server(config)
+
+                    def serve() -> None:
+                        try:
+                            server.run(sockets=[owned_socket])
+                        except BaseException as error:
+                            server_failures.append(error)
+
+                    server_thread = threading.Thread(target=serve, daemon=True)
+                    server_thread.start()
+                    try:
+                        deadline = time.monotonic() + 5
+                        while time.monotonic() < deadline:
+                            if server_failures:
+                                raise server_failures[0]
+                            if server.started:
+                                break
+                            if not server_thread.is_alive():
+                                self.fail("Synthetic loopback server exited before startup.")
+                            time.sleep(0.01)
+                        else:
+                            self.fail("Synthetic loopback server did not start before the deadline.")
+
+                        health_status, health_headers, health_body = self._loopback_request(
+                            port,
+                            "GET",
+                            "/healthz",
+                        )
+                        method_status, method_headers, method_body = self._loopback_request(
+                            port,
+                            "POST",
+                            "/healthz",
+                        )
+                        schema_status, _schema_headers, schema_body = self._loopback_request(
+                            port,
+                            "GET",
+                            "/openapi.json",
+                        )
+                    finally:
+                        server.should_exit = True
+                        server_thread.join(timeout=5)
+
+                    self.assertFalse(server_thread.is_alive())
+                    self.assertFalse(server_failures)
+                    self.assertEqual(health_status, 200)
+                    self.assertEqual(
+                        health_body,
+                        b'{"api_version":"1.0","status":"ready","storage_schema_version":"1.0"}',
+                    )
+                    self.assertEqual(health_headers["cache-control"], "no-store")
+                    self.assertEqual(health_headers["x-content-type-options"], "nosniff")
+                    self.assertEqual(method_status, 405)
+                    self.assertIn("GET", method_headers["allow"])
+                    self.assertEqual(json.loads(method_body)["error"]["code"], "METHOD_NOT_ALLOWED")
+                    self.assertEqual(schema_status, 200)
+                    self.assertEqual(
+                        set(json.loads(schema_body)["paths"]),
+                        {
+                            "/healthz",
+                            "/api/v1/runs/{run_id}/findings",
+                            "/api/v1/runs/{run_id}/findings/{finding_id}",
+                        },
+                    )
+
+                with patch.object(serve_api.uvicorn, "run", side_effect=run_owned_server):
+                    result = serve_api.main(arguments)
+
+        self.assertEqual(result, 0)
+        with self.assertRaises(OSError):
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                pass
 
 
 if __name__ == "__main__":

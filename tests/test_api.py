@@ -1,4 +1,4 @@
-"""Synthetic lifecycle tests for the Stage 1.6B read-only API boundary."""
+"""Synthetic tests for the bounded Stage 1.6 read-only API boundary."""
 
 from __future__ import annotations
 
@@ -263,6 +263,20 @@ def _settings(fixture: dict[str, object], **changes: object) -> ApiSettings:
     return ApiSettings(**values)  # type: ignore[arg-type]
 
 
+def _test_client(
+    app: object,
+    *,
+    raise_server_exceptions: bool = True,
+) -> TestClient:
+    """Use an approved local Host instead of TestClient's testserver default."""
+
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        raise_server_exceptions=raise_server_exceptions,
+    )
+
+
 class ApiSettingsTests(unittest.TestCase):
     """Settings validation is side-effect free and rejects unsafe primitives."""
 
@@ -312,7 +326,7 @@ class ApiLifecycleTests(unittest.TestCase):
                 for path in (database_path, findings_path, summary_path)
             }
             app = create_app(_settings(fixture))
-            with TestClient(app) as client:
+            with _test_client(app) as client:
                 response = client.get("/healthz")
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(
@@ -334,19 +348,19 @@ class ApiLifecycleTests(unittest.TestCase):
                 summary_path=Path(fixture["summary_path"]).with_name("missing.json"),
             )
             with self.assertRaises(ApiStartupError):
-                with TestClient(create_app(missing_settings)):
+                with _test_client(create_app(missing_settings)):
                     pass
 
         with _synthetic_store() as fixture:
             wrong_run_settings = _settings(fixture, expected_run_id="f" * 64)
             with self.assertRaises(ApiStartupError):
-                with TestClient(create_app(wrong_run_settings)):
+                with _test_client(create_app(wrong_run_settings)):
                     pass
 
         with _synthetic_store() as fixture:
             Path(fixture["summary_path"]).write_bytes(b"{}\n")
             with self.assertRaises(ApiStartupError):
-                with TestClient(create_app(_settings(fixture))):
+                with _test_client(create_app(_settings(fixture))):
                     pass
 
     def test_startup_rejects_aliases_uris_and_upstream_inputs_before_storage(self) -> None:
@@ -389,7 +403,7 @@ class ApiLifecycleTests(unittest.TestCase):
             finally:
                 connection.close()
             with self.assertRaises(ApiStartupError):
-                with TestClient(create_app(_settings(fixture))):
+                with _test_client(create_app(_settings(fixture))):
                     pass
 
         with _synthetic_store() as fixture:
@@ -409,7 +423,7 @@ class ApiLifecycleTests(unittest.TestCase):
             finally:
                 connection.close()
             with self.assertRaises(ApiStartupError):
-                with TestClient(create_app(_settings(fixture))):
+                with _test_client(create_app(_settings(fixture))):
                     pass
 
         with _synthetic_store() as fixture:
@@ -419,14 +433,14 @@ class ApiLifecycleTests(unittest.TestCase):
                 side_effect=StorageAuditError("SYNTHETIC_FAILURE", "Synthetic failure."),
             ):
                 with self.assertRaises(ApiStartupError):
-                    with TestClient(create_app(_settings(fixture))):
+                    with _test_client(create_app(_settings(fixture))):
                         pass
 
     def test_changed_database_fails_health_without_rereading_artifacts(self) -> None:
         with _synthetic_store() as fixture:
             database_path = Path(fixture["database_path"])
             app = create_app(_settings(fixture))
-            with TestClient(app) as client:
+            with _test_client(app) as client:
                 before = database_path.stat()
                 os.utime(
                     database_path,
@@ -442,7 +456,7 @@ class ApiLifecycleTests(unittest.TestCase):
             real_connect = sqlite3.connect
             with patch("sqlite3.connect", wraps=real_connect) as connect:
                 app = create_app(_settings(fixture))
-                with TestClient(app) as client:
+                with _test_client(app) as client:
                     self.assertEqual(client.get("/healthz").status_code, 200)
             self.assertTrue(connect.called)
             for call in connect.call_args_list:
@@ -487,7 +501,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         findings = self._findings()
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 default_response = client.get(self._list_path(run_id))
                 minimum_response = client.get(self._list_path(run_id), params={"limit": "1"})
                 maximum_response = client.get(self._list_path(run_id), params={"limit": "500"})
@@ -545,7 +559,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         }
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 for name, value in filters.items():
                     with self.subTest(name=name):
                         response = client.get(self._list_path(run_id), params={name: value})
@@ -580,7 +594,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         with _synthetic_store(self._findings()) as fixture:
             run_id = str(fixture["run_id"])
             path = self._list_path(run_id)
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 invalid_limits = ("0", "501", "+1", " 1", "1.0", "1e1", "true")
                 for value in invalid_limits:
                     with self.subTest(limit=value):
@@ -607,7 +621,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         findings = tuple(_build_finding(record_number) for record_number in range(1, 502))
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 default_response = client.get(self._list_path(run_id))
                 maximum_response = client.get(self._list_path(run_id), params={"limit": "500"})
 
@@ -623,7 +637,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         optional_finding = findings[2]
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 response = client.get(self._detail_path(run_id, optional_finding.finding_id))
 
         self.assertEqual(response.status_code, 200)
@@ -640,7 +654,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
             path = self._detail_path(run_id, findings[0].finding_id)
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 valid = client.get(path)
                 unknown = client.get(self._detail_path(run_id, "e" * 64))
                 malformed_run = client.get(self._detail_path("bad", findings[0].finding_id))
@@ -669,7 +683,7 @@ class ApiFindingRouteTests(unittest.TestCase):
         with _synthetic_store(findings) as fixture:
             run_id = str(fixture["run_id"])
             database_path = Path(fixture["database_path"])
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 before = database_path.stat()
                 os.utime(
                     database_path,
@@ -686,7 +700,7 @@ class ApiFindingRouteTests(unittest.TestCase):
             stored = list_findings(database_path, FindingQuery(run_id=run_id, limit=1))[0]
             inconsistent = replace(stored, run_id="b" * 64)
             with patch.object(api_app, "list_findings", return_value=(inconsistent,)):
-                with TestClient(create_app(_settings(fixture))) as client:
+                with _test_client(create_app(_settings(fixture))) as client:
                     mismatch_response = client.get(self._list_path(run_id))
 
         self.assertEqual(mismatch_response.status_code, 503)
@@ -698,7 +712,7 @@ class ApiFindingRouteTests(unittest.TestCase):
             run_id = str(fixture["run_id"])
             list_path = self._list_path(run_id)
             detail_path = self._detail_path(run_id, findings[0].finding_id)
-            with TestClient(create_app(_settings(fixture))) as client:
+            with _test_client(create_app(_settings(fixture))) as client:
                 first_list = client.get(list_path)
                 second_list = client.get(list_path)
                 first_detail = client.get(detail_path)
@@ -708,6 +722,249 @@ class ApiFindingRouteTests(unittest.TestCase):
         self.assertEqual(first_list.content, second_list.content)
         self.assertEqual(first_detail.status_code, 200)
         self.assertEqual(first_detail.content, second_detail.content)
+
+
+class ApiHttpSafetyTests(unittest.TestCase):
+    """Synthetic Stage 1.6D tests for the bounded local HTTP boundary."""
+
+    @staticmethod
+    def _list_path(run_id: str) -> str:
+        return f"/api/v1/runs/{run_id}/findings"
+
+    @classmethod
+    def _detail_path(cls, run_id: str, finding_id: str) -> str:
+        return f"{cls._list_path(run_id)}/{finding_id}"
+
+    def _assert_application_headers(self, response: object) -> None:
+        self.assertEqual(response.headers["cache-control"], "no-store")  # type: ignore[attr-defined]
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")  # type: ignore[attr-defined]
+        self.assertNotIn("access-control-allow-origin", response.headers)  # type: ignore[attr-defined]
+
+    def test_local_host_allowlist_and_forwarded_headers(self) -> None:
+        with _synthetic_store() as fixture:
+            app = create_app(_settings(fixture))
+            with _test_client(app) as client:
+                for host in ("localhost", "localhost:8000", "127.0.0.1", "127.0.0.1:8000"):
+                    with self.subTest(allowed_host=host):
+                        response = client.get("/healthz", headers={"Host": host})
+                        self.assertEqual(response.status_code, 200)
+                        self._assert_application_headers(response)
+
+                forwarded_headers = {
+                    "Host": "127.0.0.1",
+                    "Forwarded": "host=untrusted.invalid",
+                    "X-Forwarded-Host": "untrusted.invalid",
+                }
+                self.assertEqual(
+                    client.get("/healthz", headers=forwarded_headers).status_code,
+                    200,
+                )
+
+                for host in ("testserver", "0.0.0.0", "untrusted.invalid"):
+                    with self.subTest(rejected_host=host):
+                        response = client.get("/healthz", headers={"Host": host})
+                        self.assertEqual(response.status_code, 400)
+                        self.assertEqual(response.content, b"Invalid host header")
+                        self.assertNotIn("cache-control", response.headers)
+
+                response = client.get(
+                    "/healthz",
+                    headers={
+                        "Host": "untrusted.invalid",
+                        "Forwarded": "host=127.0.0.1",
+                        "X-Forwarded-Host": "127.0.0.1",
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_origin_rejection_and_application_security_headers(self) -> None:
+        with _synthetic_store() as fixture:
+            with _test_client(create_app(_settings(fixture))) as client:
+                ready = client.get("/healthz")
+                self.assertEqual(ready.status_code, 200)
+                self._assert_application_headers(ready)
+
+                first = client.get(
+                    "/healthz",
+                    headers={"Origin": "https://untrusted.invalid"},
+                )
+                second = client.get(
+                    "/healthz",
+                    headers={"Origin": "https://untrusted.invalid"},
+                )
+                blank_origin = client.get("/healthz", headers={"Origin": ""})
+
+        for response in (first, second, blank_origin):
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"]["code"], "ORIGIN_NOT_ALLOWED")
+            self._assert_application_headers(response)
+        self.assertEqual(first.content, second.content)
+
+    def test_request_target_limit_uses_raw_path_and_runs_before_routing(self) -> None:
+        with _synthetic_store() as fixture:
+            run_id = str(fixture["run_id"])
+            app = create_app(_settings(fixture))
+            exact_path = "/" + "x" * (api_app.MAX_REQUEST_TARGET_BYTES - 1)
+            over_path = "/" + "x" * api_app.MAX_REQUEST_TARGET_BYTES
+            health_path = "/healthz"
+            exact_query = "x" * (
+                api_app.MAX_REQUEST_TARGET_BYTES - len(health_path) - 1
+            )
+            with _test_client(app) as client:
+                exact_response = client.get(exact_path)
+                exact_query_response = client.get(f"{health_path}?{exact_query}")
+                with patch.object(api_app, "require_current_store") as current_store:
+                    first_over_limit = client.get(over_path)
+                    second_over_limit = client.get(over_path)
+                    over_query_response = client.get(f"{health_path}?{exact_query}x")
+                current_store.assert_not_called()
+                normal_response = client.get(self._list_path(run_id))
+
+        self.assertEqual(normal_response.status_code, 200)
+        self.assertEqual(exact_response.status_code, 404)
+        self.assertEqual(exact_response.json()["error"]["code"], "NOT_FOUND")
+        self.assertEqual(exact_query_response.status_code, 422)
+        self.assertEqual(
+            exact_query_response.json()["error"]["code"], "INVALID_REQUEST"
+        )
+        for response in (first_over_limit, second_over_limit, over_query_response):
+            self.assertEqual(response.status_code, 414)
+            self.assertEqual(
+                response.json()["error"]["code"], "REQUEST_TARGET_TOO_LONG"
+            )
+            self._assert_application_headers(response)
+        self.assertEqual(first_over_limit.content, second_over_limit.content)
+
+    def test_query_free_routes_and_stable_http_error_mapping(self) -> None:
+        finding = _build_finding()
+        with _synthetic_store((finding,)) as fixture:
+            run_id = str(fixture["run_id"])
+            list_path = self._list_path(run_id)
+            detail_path = self._detail_path(run_id, finding.finding_id)
+            with _test_client(create_app(_settings(fixture))) as client:
+                first_openapi = client.get("/openapi.json")
+                second_openapi = client.get("/openapi.json")
+                openapi_head = client.head("/openapi.json")
+                health_query = client.get("/healthz?unexpected=value")
+                openapi_query = client.get("/openapi.json?unexpected=value")
+                invalid_request = client.get(f"{list_path}?limit=0")
+                unknown_route = client.get("/not-a-route")
+                wrong_run = client.get(self._list_path("f" * 64))
+                missing_finding = client.get(self._detail_path(run_id, "e" * 64))
+                method_responses = tuple(
+                    getattr(client, method)(detail_path)
+                    for method in ("post", "put", "patch", "delete", "options")
+                )
+
+        self.assertEqual(first_openapi.status_code, 200)
+        self.assertEqual(first_openapi.content, second_openapi.content)
+        self.assertEqual(first_openapi.content, api_app._json_bytes(first_openapi.json()))
+        self._assert_application_headers(first_openapi)
+        self.assertEqual(openapi_head.status_code, 200)
+        self._assert_application_headers(openapi_head)
+
+        expected_codes = (
+            (health_query, "INVALID_REQUEST"),
+            (openapi_query, "INVALID_REQUEST"),
+            (invalid_request, "INVALID_REQUEST"),
+            (unknown_route, "NOT_FOUND"),
+            (wrong_run, "RUN_NOT_FOUND"),
+            (missing_finding, "FINDING_NOT_FOUND"),
+        )
+        for response, code in expected_codes:
+            self._assert_application_headers(response)
+            self.assertEqual(response.json()["error"]["code"], code)
+        for response in method_responses:
+            self.assertEqual(response.status_code, 405)
+            self.assertEqual(response.json()["error"]["code"], "METHOD_NOT_ALLOWED")
+            self.assertIn("GET", response.headers["allow"])
+            self._assert_application_headers(response)
+
+    def test_response_budget_allows_exact_size_and_rejects_oversized_results(self) -> None:
+        empty_body_size = len(api_app._json_bytes({"value": ""}))
+        below_budget = api_app._json_response(
+            {"value": "x" * (api_app.MAX_RESPONSE_BODY_BYTES - empty_body_size - 1)}
+        )
+        exact_budget = api_app._json_response(
+            {"value": "x" * (api_app.MAX_RESPONSE_BODY_BYTES - empty_body_size)}
+        )
+        over_budget = api_app._json_response(
+            {"value": "x" * (api_app.MAX_RESPONSE_BODY_BYTES - empty_body_size + 1)}
+        )
+        self.assertEqual(len(below_budget.body), api_app.MAX_RESPONSE_BODY_BYTES - 1)
+        self.assertEqual(len(exact_budget.body), api_app.MAX_RESPONSE_BODY_BYTES)
+        self.assertEqual(over_budget.status_code, 422)
+        over_budget_payload = json.loads(over_budget.body)
+        self.assertEqual(over_budget_payload["error"]["code"], "RESULT_TOO_LARGE")
+        self.assertEqual(over_budget.body, api_app._json_bytes(over_budget_payload))
+        self._assert_application_headers(over_budget)
+
+        finding = _build_finding()
+        oversized_payload = {"opaque": "x" * api_app.MAX_RESPONSE_BODY_BYTES}
+        with _synthetic_store((finding,)) as fixture:
+            run_id = str(fixture["run_id"])
+            with _test_client(create_app(_settings(fixture))) as client:
+                with patch.object(
+                    api_app,
+                    "_complete_finding_payload",
+                    return_value=oversized_payload,
+                ):
+                    oversized_list = client.get(self._list_path(run_id))
+                with patch.object(
+                    api_app,
+                    "_complete_finding_payload",
+                    return_value=oversized_payload,
+                ):
+                    oversized_detail = client.get(
+                        self._detail_path(run_id, finding.finding_id)
+                    )
+
+        for response in (oversized_list, oversized_detail):
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json()["error"]["code"], "RESULT_TOO_LARGE")
+            self.assertNotIn(b"opaque", response.content)
+            self._assert_application_headers(response)
+
+    def test_deterministic_utf8_and_internal_failures_do_not_leak(self) -> None:
+        finding = _build_finding(observed_value="หลักฐานสังเคราะห์")
+        with _synthetic_store((finding,)) as fixture:
+            run_id = str(fixture["run_id"])
+            list_path = self._list_path(run_id)
+            app = create_app(_settings(fixture))
+            with _test_client(app, raise_server_exceptions=False) as client:
+                first_success = client.get(list_path)
+                second_success = client.get(list_path)
+                with patch.object(
+                    api_app,
+                    "list_findings",
+                    side_effect=RuntimeError(
+                        "RuntimeError C:\\private\\store.sqlite3 SELECT secret"
+                    ),
+                ):
+                    first_internal = client.get(list_path)
+                    second_internal = client.get(list_path)
+                with patch.object(
+                    api_app,
+                    "_complete_finding_payload",
+                    return_value={"value": float("nan")},
+                ):
+                    nonfinite_internal = client.get(list_path)
+
+        self.assertEqual(first_success.status_code, 200)
+        self.assertEqual(first_success.content, second_success.content)
+        self.assertEqual(first_success.content, api_app._json_bytes(first_success.json()))
+        self.assertIn("หลักฐานสังเคราะห์".encode("utf-8"), first_success.content)
+        self.assertNotIn(b"\\u0e2b", first_success.content)
+        self._assert_application_headers(first_success)
+
+        for response in (first_internal, second_internal, nonfinite_internal):
+            self.assertEqual(response.status_code, 500)
+            self.assertEqual(response.json()["error"]["code"], "INTERNAL_ERROR")
+            self._assert_application_headers(response)
+        self.assertEqual(first_internal.content, second_internal.content)
+        for forbidden_text in ("RuntimeError", "private", "SELECT", "Traceback"):
+            self.assertNotIn(forbidden_text, first_internal.text)
+        self.assertNotIn("NaN", nonfinite_internal.text)
 
 
 if __name__ == "__main__":

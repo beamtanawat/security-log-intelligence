@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -34,6 +35,7 @@ from api import app as api_app  # noqa: E402
 from api import bridge as api_bridge  # noqa: E402
 from api.bridge import ApiStartupError, verify_startup_store  # noqa: E402
 import serve_api  # noqa: E402
+import validate_api  # noqa: E402
 from detection.models import (  # noqa: E402
     ActiveRuleVersion,
     DetectionEvidence,
@@ -1355,6 +1357,192 @@ class ApiLauncherTests(unittest.TestCase):
         with self.assertRaises(OSError):
             with socket.create_connection(("127.0.0.1", port), timeout=0.2):
                 pass
+
+
+class ApiValidatorTests(unittest.TestCase):
+    """Synthetic tests for the explicit Stage 1.6F validation helper."""
+
+    @staticmethod
+    def _contract_result(*, health_sha256: str = "a" * 64) -> validate_api.ApiContractResult:
+        return validate_api.ApiContractResult(
+            finding_count=0,
+            evidence_count=0,
+            unique_source_record_count=0,
+            endpoint_checks={
+                "health": "PASS",
+                "findings": "PASS",
+                "detail": "PASS",
+                "openapi": "PASS",
+            },
+            http_safety_checks={
+                "invalid_request": "PASS",
+                "origin_rejection": "PASS",
+                "method_rejection": "PASS",
+                "request_target_limit": "PASS",
+                "host_rejection": "PASS",
+            },
+            body_sha256={
+                "health": health_sha256,
+                "default_findings": "b" * 64,
+                "full_findings": "c" * 64,
+                "openapi": "d" * 64,
+            },
+        )
+
+    def test_validator_checks_complete_synthetic_http_contract(self) -> None:
+        """A valid synthetic API response satisfies the complete HTTP contract."""
+
+        findings = (_build_finding(record_number=1), _build_finding(record_number=2))
+        with _synthetic_store(findings) as fixture:
+            settings = _settings(fixture)
+            audit = storage_audit.audit_detection_store(Path(fixture["database_path"]))
+            expected_findings = tuple(finding.to_dict() for finding in findings)
+            with _test_client(create_app(settings)) as client:
+                def request(
+                    method: str,
+                    target: str,
+                    headers: dict[str, str] | None = None,
+                ) -> validate_api.HttpResponse:
+                    response = client.request(method, target, headers=headers)
+                    return validate_api.HttpResponse(
+                        status_code=response.status_code,
+                        headers={name.lower(): value for name, value in response.headers.items()},
+                        body=response.content,
+                    )
+
+                result = validate_api.validate_http_contract(
+                    request,
+                    run_id=str(fixture["run_id"]),
+                    expected_findings=expected_findings,
+                    audit_result=audit,
+                )
+
+        self.assertEqual(result.finding_count, 2)
+        self.assertEqual(result.evidence_count, 2)
+        self.assertEqual(result.unique_source_record_count, 2)
+        self.assertEqual(result.endpoint_checks["health"], "PASS")
+        self.assertEqual(result.endpoint_checks["findings"], "PASS")
+        self.assertEqual(result.endpoint_checks["detail"], "PASS")
+        self.assertEqual(result.endpoint_checks["openapi"], "PASS")
+        self.assertEqual(result.http_safety_checks["origin_rejection"], "PASS")
+        self.assertEqual(result.http_safety_checks["host_rejection"], "PASS")
+
+    def test_transport_hash_equality_accepts_matching_response_identities(self) -> None:
+        """Equivalent in-process and loopback response hashes are accepted."""
+
+        in_process = self._contract_result()
+        loopback = self._contract_result()
+
+        validate_api._require_matching_transport_hashes(in_process, loopback)
+
+    def test_run_validation_rejects_cross_transport_hash_mismatch(self) -> None:
+        """A transport byte mismatch prevents a PASS report without leaking bodies."""
+
+        run_id = "a" * 64
+        options = validate_api.ValidationOptions(
+            settings=ApiSettings(
+                database_path=Path("data/processed/synthetic.sqlite3"),
+                findings_path=Path("data/processed/synthetic.jsonl"),
+                summary_path=Path("data/processed/synthetic_summary.json"),
+                expected_run_id=run_id,
+            ),
+            summary_output=None,
+        )
+        audit = SimpleNamespace(
+            run_id=run_id,
+            findings_sha256="b" * 64,
+            summary_sha256="c" * 64,
+            logical_export_sha256="d" * 64,
+            finding_count=0,
+            evidence_count=0,
+            rule_count=0,
+        )
+        integrity = validate_api.FileIntegrity(size_bytes=1, sha256="e" * 64)
+        with (
+            patch.object(
+                validate_api,
+                "_resolve_inputs",
+                return_value=(
+                    Path("data/processed/synthetic.sqlite3"),
+                    Path("data/processed/synthetic.jsonl"),
+                    Path("data/processed/synthetic_summary.json"),
+                ),
+            ),
+            patch.object(validate_api, "_require_no_sidecars"),
+            patch.object(validate_api, "_file_integrity", return_value=integrity),
+            patch.object(validate_api, "_audit_store", return_value=audit),
+            patch.object(validate_api, "_validated_source_findings", return_value=()),
+            patch.object(validate_api, "_validate_storage_projection"),
+            patch.object(
+                validate_api,
+                "_validate_in_process",
+                return_value=self._contract_result(),
+            ),
+            patch.object(
+                validate_api,
+                "_validate_loopback",
+                return_value=self._contract_result(health_sha256="f" * 64),
+            ),
+        ):
+            with self.assertRaises(validate_api.ValidationError) as raised:
+                validate_api.run_validation(options)
+
+        self.assertEqual(raised.exception.code, "TRANSPORT_RESPONSE_HASH_MISMATCH")
+        self.assertNotIn("synthetic", str(raised.exception))
+        self.assertNotIn("{", str(raised.exception))
+
+    def test_validator_refuses_invalid_port_before_real_validation(self) -> None:
+        """An invalid listener port must not reach the real-validation path."""
+
+        with self.assertRaises(SystemExit) as exited, redirect_stderr(StringIO()):
+            validate_api.parse_options(
+                [
+                    "--database",
+                    "data/processed/store.sqlite3",
+                    "--findings",
+                    "data/processed/findings.jsonl",
+                    "--summary",
+                    "data/processed/summary.json",
+                    "--expected-run-id",
+                    "a" * 64,
+                    "--port",
+                    "0",
+                ]
+            )
+
+        self.assertEqual(exited.exception.code, 2)
+
+    def test_validator_publishes_only_a_new_bounded_summary(self) -> None:
+        """A report publisher must never overwrite a previous validation result."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            processed_directory = Path(temporary_directory) / "data" / "processed"
+            processed_directory.mkdir(parents=True)
+            summary_path = processed_directory / "validation.json"
+            report = {
+                "validation_stage": "1.6F",
+                "verdict": "PASS",
+                "run_id": "a" * 64,
+            }
+
+            validate_api.publish_validation_summary(
+                summary_path,
+                report,
+                processed_directory=processed_directory,
+            )
+
+            self.assertEqual(
+                summary_path.read_bytes(),
+                b'{"run_id":"' + b"a" * 64 + b'","validation_stage":"1.6F","verdict":"PASS"}\n',
+            )
+            with self.assertRaises(validate_api.ValidationError) as raised:
+                validate_api.publish_validation_summary(
+                    summary_path,
+                    report,
+                    processed_directory=processed_directory,
+                )
+            self.assertEqual(raised.exception.code, "SUMMARY_OUTPUT_EXISTS")
+            self.assertFalse(list(processed_directory.glob(".stage_1_6f_*.tmp")))
 
 
 if __name__ == "__main__":

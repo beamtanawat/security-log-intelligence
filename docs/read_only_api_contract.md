@@ -1,7 +1,9 @@
 # Read-Only Detection Findings API Contract
 
-**Status:** Stage 1.6 contract updated for Checkpoint 1.6E; local runtime
-validation remains a checkpoint gate.
+**Status:** Stage 1.6 contract updated through Checkpoint 1.6F. The corrected
+validator completed local real-store validation with `FINAL RESULT: PASS`,
+including enforced byte-identity equality across in-process and real-loopback
+responses.
 
 This document records the verified Stage 1.5 storage boundary and the
 implemented Stage 1.6 contract. It specifies a local read-only API and its
@@ -508,3 +510,56 @@ The command is local-only. It does not authenticate a local user or protect
 against a privileged local process. Its synthetic loopback tests use only
 temporary fixtures; real-store API validation remains a separate Checkpoint
 1.6F gate.
+
+## Final real-store validation contract
+
+Checkpoint 1.6F is performed only with the existing Stage 1.5 SQLite store,
+the approved Stage 1.4 finding JSONL, and the complete Stage 1.4F summary
+envelope. It does not rescan raw CSV data, regenerate normalized JSONL, rerun
+detection, rebuild storage, or alter any approved input.
+
+The repository-supported command is:
+
+```powershell
+.\scripts\validate_stage_1_6.ps1 `
+  -Database .\data\processed\stage_1_5f_detection_store.sqlite3 `
+  -FindingsInput .\data\processed\stage_1_4f_detection_findings.jsonl `
+  -SummaryInput .\data\processed\stage_1_4f_detection_summary.json `
+  -ExpectedRunId 5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc `
+  -Port 8000
+```
+
+The wrapper first verifies Python and dependency consistency, runs the complete
+synthetic suite, and then delegates real validation to `src/validate_api.py`.
+The helper records size and SHA-256 values for the configured database, finding
+artifact, and summary before validation; reconciles source findings with the
+public read-only storage query; validates the API in-process; and starts only
+the fixed-loopback launcher for a separate real HTTP pass. It then repeats the
+audit and input identities, requires no SQLite journal/WAL/SHM sidecars, and
+requires the owned launcher process and configured loopback port to be gone.
+
+The validator checks the approved health, list, detail, and OpenAPI routes;
+all supported list filters; bounded negative HTTP cases; deterministic response
+bytes; complete canonical finding reconstruction; evidence and source-record
+counts; and application security headers. Its report contains aggregate counts,
+hashes, stable check results, and no finding payloads, SQL, raw records, or
+absolute paths.
+
+`-SummaryOutput` is optional. When supplied, it must name a new path beneath
+`data/processed/`; the helper publishes a compact JSON summary without
+overwriting a prior result. This optional output is ignored by Git and is not a
+replacement for the existing Stage 1.4 or Stage 1.5 evidence.
+
+The corrected repository-supported validator completed a local Stage 1.6F run
+against the approved artifacts and returned `FINAL RESULT: PASS` on
+`127.0.0.1:8000`. It reconciled 43 findings from 25 source records with 227
+evidence entries and two rules; the database, finding artifact, and summary
+were unchanged, and SQLite sidecars were absent. Its final synthetic regression
+recorded 176 unittest passes, 176 pytest passes, 109 subtests, and two known
+non-blocking upstream deprecation warnings.
+
+The corrected validator enforces equality of the complete in-process and
+real-loopback SHA-256 response-identity mappings before it can report `PASS`;
+a difference fails with `TRANSPORT_RESPONSE_HASH_MISMATCH`. This completed
+Stage 1.6F validation does not change the interpretation of a finding:
+`RULE MATCH != CONFIRMED ATTACK`.

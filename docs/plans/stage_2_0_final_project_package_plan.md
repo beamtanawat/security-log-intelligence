@@ -70,13 +70,16 @@ failure. No stage is globally BLOCKED BY ENVIRONMENT.
 
 ## 3. Inputs
 
-Require completed Stage 1.9 and read its explanation bundle and finalized
-evaluation summary, plus Stage 1.7/1.8 metadata/feature/score identities.
-Resolve exactly the paths documented in those plans. The Stage 1.9 evaluation
-summary is the sole primary review-status and accepted-label authority; the
-builder does not open or reinterpret the raw frozen label CSV. Verify the label
-identity recorded in evaluation lineage, source-record joins and all hashes
-before packaging.
+Require completed, corrected, and audited Stage 1.9 explanation and
+auto-triage bundles, plus Stage 1.7/1.8 metadata/feature/score identities.
+The Stage 1.9 auto-triage summary is the authoritative automated aggregate
+handoff; its bound row-level CSV supplies auto_triage and the no-human-review
+status for every record. Reconcile its Top-50 table, row counts, source-record
+joins and hashes before packaging. Human review is optional. If a completed
+human evaluation summary is separately supplied, audit its lineage and copy
+its accepted labels/review statuses without changing auto_triage. Otherwise
+keep human labels null, queue members PENDING and other rows NOT_SELECTED.
+The builder never opens or reinterprets a raw frozen label CSV.
 Existing SQLite and API remain the validated rule-finding demonstration.
 
 ## 4. Scope
@@ -112,6 +115,7 @@ schema_version:str="1.0"; anomaly_rank:int; investigation_rank:int;
 source_record_number:int; source_record_id:str;
 partition:REFERENCE|HOLDOUT; anomaly_score:float[0,100];
 investigation_priority_score:float[0,100]; anomaly_band:str;
+auto_triage:HIGH_INTEREST|MEDIUM_INTEREST|LOW_INTEREST;
 analyst_review_selected:bool; suspected_behaviors:list[str];
 suspected_attack_type:str|null; evidence_strength:LOW|MEDIUM|HIGH|null;
 explanation_status:COMPLETE|LIMITED; top_reasons:list[reason];
@@ -123,20 +127,21 @@ analyst_label:SUSPICIOUS|NOT_SUSPICIOUS|UNCERTAIN|null;
 contextual_label:same nullable enum;
 review_status:NOT_SELECTED|PENDING|REVIEWED_RESOLVED|REVIEWED_UNCERTAIN.
 
-Fields are copied from upstream, never recomputed differently.
+Fields are copied from audited upstream artifacts, never recomputed
+differently. The auto-triage CSV supplies the per-record triage value and
+no-human-review status; its summary supplies automated aggregate tables.
 suspected_behaviors is the complete ordered Stage 1.9 projection and is never
 reconstructed from bounded top_reasons. suspected_attack_type remains null for
 non-Top-50 rows and is not rendered as "No Attack"; a presentation may show
 the neutral text "Not assigned" while machine-readable artifacts preserve
-null. analyst_label always means the blind_label copied from the Stage 1.9
-evaluation summary. contextual_label is copied separately and is null unless a
-separately hashed informed review was supplied. review_status is copied from
-that same authoritative per-record summary using only
-NOT_SELECTED, PENDING, REVIEWED_UNCERTAIN or REVIEWED_RESOLVED; Stage 2.0 does
-not derive a different status or let contextual_label determine it.
-NOT_SELECTED has null review fields; PENDING blocks final closure. All 100
-reviewed rows must be resolved or explicitly uncertain. Explainable anomaly is
-not an attack verdict.
+null. Without an optional audited human evaluation, analyst_label and
+contextual_label are null, queue rows remain PENDING, and non-queue rows remain
+NOT_SELECTED. If real human evaluation is supplied, analyst_label means its
+accepted blind_label; contextual_label is copied separately; review_status is
+copied from that evaluation's per-record projection. Stage 2.0 never infers a
+label or status from scores, rules, source threat fields or auto_triage.
+PENDING does not block closure. Explainable anomaly and auto_triage are not
+attack verdicts; LOW_INTEREST does not mean benign or safe.
 
 CSV uses the same scalar columns in listed order, expands display_context
 into the exact Stage 1.9 operational columns, encodes lists/reasons as compact
@@ -165,14 +170,15 @@ Render zero/empty groups as zero or "no observations", not fabricated values.
 | 04_protocol_representation | Context; final JSONL | ICMP/TCP/UDP/OTHER | Share in rank<=1000 versus rank>1000 | Required; exact Top-1%-by-rank selection, not the percentile band |
 | 05_service_representation | Context; final JSONL | Ten most frequent services in rank<=1000 plus Other/Missing | Selected versus remaining share | Required; ties lexical, source-assigned services |
 | 06_observed_anomaly_driver_frequency | Honest driver-frequency summary; complete suspected_behaviors from final JSONL, never top_reasons | Five canonical driver families plus UNCLASSIFIED_ANOMALOUS_PATTERN when present | Count and share of each tag in Top50 and Top1000 | Required; one record may contribute to multiple qualifying-family counts; fallback counts only Top-50 rows with no qualifying family; descriptive frequency, not Model Feature Importance |
-| 07_ai_source_agreement | Reference overlap; evaluation summary | Source observation yes/no | AI Top50 selection yes/no; cell counts | Required; union reference, not ground truth; individual tables in report |
-| 08_reviewed_confusion_matrix | Human comparison; evaluation summary | Blind suspicious/not suspicious | AI selection yes/no; TP/FP/FN/TN counts | Conditional on >=1 resolved label; include reviewed-only title and uncertain counts |
-| 09_precision_at_k | Review utility; evaluation summary | K=10,20,50 | P@K point or uncertainty range, coverage labels | Conditional on >=1 resolved Top50 label; bounds are not confidence intervals |
+| 07_auto_triage_distribution | Automated priority; audited Stage 1.9 auto-triage summary | HIGH/MEDIUM/LOW_INTEREST | Record count and share | Required; priority is not maliciousness or benignness |
+| 08_evidence_strength | Explanation evidence richness; audited auto-triage summary | HIGH/MEDIUM/LOW/null | Record count and share | Required; strength is not attack probability |
+| 09_suspected_attack_interpretation | Cautious interpretation; audited auto-triage summary | Two approved phrases and null | Record count and share | Required; interpretations are not confirmed attacks |
 | 10_feature_comparison | Explain volume distributions; features and final JSONL | log_total_bytes, log_duration (two panels) | Empirical cumulative proportion for rank<=100 and remainder | Required; exclude missing operands, display counts/zero mass; no time-unit claim |
 
-Exactly eight required charts and up to two conditional charts. If conditional
-labels do not support a plot, record NOT_AVAILABLE with reason in report and
-summary; never invent values or fill an invalid plot. No ROC/PR curves.
+Exactly ten required charts use audited automated results and need no human
+labels. An optional human-reviewed comparison may be described separately
+when real review evidence exists, but no required chart or project closure
+depends on it. Never invent values or fill an invalid plot. No ROC/PR curves.
 Chart data definitions are frozen; independent aggregation audit checks each
 count/denominator. Use band names only for actual Stage 1.8 band groups;
 rank-based Top1% selection is explicitly labelled as such.
@@ -180,14 +186,17 @@ rank-based Top1% selection is explicitly labelled as such.
 ### Metrics panel
 
 DATASET / SYSTEM COUNTS: records, feature count=36, actual partition counts,
-Top50 selection size, reviewed=100, resolved/uncertain counts and coverage.
+Top50 selection size, auto-triage counts, and NOT_SELECTED/PENDING review counts.
 MODEL DIAGNOSTICS: seed/config, primary reproducibility result, distinct scores,
 ties, partition quantiles and secondary-seed overlap.
-ANALYST-REVIEW METRICS: blind reviewed-sample precision/recall/F1 with actual
-denominators, uncertainty bounds/null reasons; P@10/20/50 and coverage;
-reviewed suspicious share with resolved and full-sample denominators named.
-REFERENCE AGREEMENT: rule/source/subtype overlap and enrichment, explicitly
-descriptive and correlated. No attack-detection accuracy or confidence.
+AUTOMATED ASSESSMENT: audited Stage 1.9 triage/band/evidence/behavior/attack
+interpretation distributions, score/priority quantiles and explanation
+coverage. No attack-detection accuracy or confidence.
+OPTIONAL ANALYST REVIEW: only if a real audited human evaluation is supplied,
+show its reviewed-sample metrics with denominators, uncertainty/null reasons,
+P@10/20/50 and descriptive correlated reference agreement. With no human
+ground truth, supervised metrics remain null with reason
+NO_HUMAN_GROUND_TRUTH and are never inferred from model outputs.
 
 ### Four case studies
 
@@ -196,7 +205,7 @@ Select unique records in sequence, sorting each candidate set by anomaly_rank:
 1. Top50 with reference union present.
 2. Top50 without reference union.
 3. Reference present outside Top50 (AI/reference disagreement).
-4. Reviewed NOT_SUSPICIOUS, otherwise reviewed UNCERTAIN.
+4. MEDIUM_INTEREST outside Top50 with a specific suspected behavior.
 
 If a category is empty, select the next unused Top50 record with a different
 dominant driver family; then next unused anomaly rank. Clearly label fallback
@@ -205,16 +214,17 @@ or human label. Four cases are the default, within the requested 3–5 range.
 
 Each case: source record number/ID, both ranks, scores, band, reasons/raw
 operands, suspected behaviors, exact nullable attack fallback/category, nullable
-evidence strength, rule/source observations, blind review/contextual review,
-interpretation, limitations and source identity. No hardcoded record IDs
-before actual results.
+evidence strength, auto_triage, rule/source observations, optional genuine
+blind/contextual review, interpretation, limitations and source identity. No
+hardcoded record IDs before actual results.
 
 ### Architecture and demo
 
 Final report shows two branches after normalization:
 normalized events -> existing rules -> SQLite -> read-only API;
 normalized events -> features -> Isolation Forest -> scores -> explanations
--> review/evaluation -> final outputs/report.
+-> auto-triage -> final outputs/report. Optional human review/evaluation is a
+separate validation branch after the blinded queue.
 Rule/source observations feed explanation context/evaluation, never X.
 The API is NOT a pipeline step that supplies all 100k rows to feature building.
 Embed a Mermaid representation in the report during implementation; no new
@@ -222,8 +232,9 @@ diagram file in this planning mission.
 
 Report sections: Problem; Dataset; Data Limitations; Architecture; Rule
 Baseline; Feature Engineering; Leakage Controls; Model; Anomaly Scoring;
-Explanation Method; Suspected Behavior/Attack Boundaries; Evaluation
-Methodology; Results/Metrics/Graphs; Four Case Studies; Limitations;
+Explanation Method; Suspected Behavior/Attack Boundaries; Automated Triage
+and Optional Human Evaluation Methodology; Results/Metrics/Graphs; Four Case
+Studies; Limitations;
 Reproducibility; Local Demo; conceptual Future Work.
 Use docs/final_project_report.md; existing README gains a short link/demo
 entry only during Stage 2.0 implementation. Link local ignored package graphs;
@@ -232,35 +243,45 @@ No upload/publication is authorized. Portfolio-ready means reproducible local
 presentation, not publicly hosting the dataset.
 
 Demo sequence: open report and ranked CSV; trace one actual case to normalized
-source; explain its features/score/reference caveats; show blind evaluation;
+source; explain its features/score/reference caveats; show audited auto-triage;
 launch the existing loopback API for rule observations. Do not claim API serves
 AI results. Use existing documented launcher arguments and input identities.
 
 ## 7. Data Contracts
 
-Final row schema is specified above. Its Stage 1.9 join copies
-source_record_number, review_id, analyst_review_selected, blind_label as
-analyst_label, contextual_label and review_status from the authoritative
-record_review_results projection. It copies top_reasons, the complete ordered
-suspected_behaviors, nullable suspected_attack_type, nullable evidence_strength,
-rule observation context and source threat observation context from the
-explanation artifact. Stage 1.8 remains authoritative for anomaly score/rank,
-partition and band identity; Stage 1.9 supplies its bound identity rather than
-duplicating the Stage 1.8 artifact. No label, status, behavior or attack-type
-field is inferred during final packaging.
+Final row schema is specified above. Its Stage 1.9 join copies auto_triage
+and no-human-review status from the audited auto-triage CSV, and top_reasons,
+complete ordered suspected_behaviors, nullable suspected_attack_type, nullable
+evidence_strength, rule observation context and source threat observation
+context from the explanation artifact. Without optional human evaluation,
+analyst_label and contextual_label remain null. With a separately supplied,
+audited human evaluation summary, copy blind_label as analyst_label,
+contextual_label and review_status from its authoritative per-record projection
+while preserving auto_triage. Stage 1.8 remains authoritative for anomaly
+score/rank, partition and band identity; Stage 1.9 supplies its bound identity
+rather than duplicating the Stage 1.8 artifact. No label, status, behavior or
+attack-type field is inferred during final packaging.
 
 analysis_summary.json schema 1.0 holds:
-upstream_identities; final_jsonl_identity; final_csv_identity; record_count;
-feature_count; partition_counts; review_counts; model_diagnostics;
-analyst_review_metrics (copied with scope/null/bounds); reference_agreement;
+upstream_identities (including audited Stage 1.9 auto-triage identities and
+optional human evaluation identity); final_jsonl_identity;
+final_csv_identity; record_count; feature_count; partition_counts;
+auto_triage_counts/distribution; anomaly_band_counts/distribution;
+evidence_strength_counts/distribution; suspected_behavior_counts/distribution;
+suspected_attack_interpretation_counts/distribution; score_quantiles;
+priority_score_quantiles; explanation_coverage; review_counts;
+model_diagnostics; analyst_review_metrics (null with
+reason=NO_HUMAN_GROUND_TRUTH when no human evaluation exists, otherwise copied
+with reviewed-sample scope/null/bounds); reference_agreement (null when no
+human evaluation exists, otherwise copied as descriptive overlap);
 graph_manifest (name,status,reason,source identities,counts,relative path);
 case_selection (record keys,requested category,actual category,fallback reason);
 report_contract_version="1.0"; security_interpretation; package_validation.
-No self-hash. Model/feature metadata and explanation/evaluation files remain
+No self-hash. Model/feature metadata and explanation/auto-triage files remain
 upstream references; do not duplicate model binaries, raw label files or
-metadata in the package. The evaluation-summary lineage records the frozen
-label identity; the Stage 2.0 builder verifies that identity without opening or
-reinterpreting the raw label CSV.
+metadata in the package. When optional human evaluation is supplied, its
+lineage records the frozen label identity; the Stage 2.0 builder verifies that
+identity without opening or reinterpreting the raw label CSV.
 
 ## 8. Planned Modules / Files
 
@@ -269,30 +290,32 @@ src/build_final_package.py; tests/test_final_package.py;
 scripts/validate_stage_2_0.ps1; docs/final_project_report.md.
 Modify README.md only for final report/demo navigation and requirements.txt
 only for reviewed Matplotlib dependency. These are future implementation files;
-this targeted correction changes only the Stage 1.9 and Stage 2.0 plan
-documents and no implementation file.
+this targeted correction changes this Stage 2.0 plan as part of the approved
+Stage 1.9 handoff correction, but creates no Stage 2.0 implementation file.
 
 ## 9. Detailed Implementation Tasks
 
 ### Checkpoint 2.0A — Final contract and package review
 
-Reconcile all upstream contracts/hashes and human review completion. Freeze
+Reconcile all upstream contracts/hashes and the audited auto-triage bundle. Freeze
 column order/escaping, graph aggregations, four-case selection and report
-template; review minimal plotting dependency. Gate: no PENDING labels, no new
-ML/architecture task. STOP for checkpoint review.
+template; review minimal plotting dependency. An optional human evaluation is
+audited only if supplied. Gate: no fabricated labels or metrics and no new
+ML/architecture task; PENDING queue rows are valid. STOP for checkpoint review.
 
 ### Checkpoint 2.0B — Tested exporter, charts and cases
 
 Test joins, schema/CSV round-trip, independent aggregation and fallback case
 selection before implementation. Build the three exports and chart bundle.
-Use synthetic fixtures for required/conditional graphs, then inspect rendered
-labels, legends, count captions and missing-value behavior. Gate: all tests
+Use synthetic fixtures for the required graphs and optional review evidence,
+then inspect rendered labels, legends, count captions and missing-value behavior. Gate: all tests
 pass; no invented metric or evidence.
 
 ### Checkpoint 2.0C — Final real-data validation
 
 Build actual package, independently reconcile 100k rows and both rank
-permutations, verify unchanged source artifacts and all human-label lineage.
+permutations, verify unchanged source artifacts and the audited auto-triage
+lineage. Verify human-label lineage only if a real evaluation is supplied.
 Audit every graph aggregation and all four cases. Run full regression and
 the existing Stage 1.6 real loopback validator, cleaning only its owned process.
 Gate: real artifacts/reproducibility/input integrity/demo validation PASS.
@@ -303,7 +326,7 @@ No arbitrary anomaly-rate/metric threshold is a pass requirement.
 Write report from audited outputs only, embed workflow/graphs/cases and exact
 local reproduction commands; verify all relative links and render the report
 for legibility. Add minimal README navigation. Perform the demo and record
-evidence/limits, including skipped conditional charts. Close the FortiGate
+evidence/limits, including unavailable optional human metrics. Close the FortiGate
 project at Stage 2.0; no follow-on stage or extra feature is required.
 
 ## 10. Output Artifacts
@@ -320,11 +343,14 @@ are not a cross-platform determinism gate.
 
 Synthetic: exact schema/types/nulls; rank versus source ordering; omitted or
 duplicate join records; CSV formulas/quoting/newlines/Unicode and round-trip;
-unreviewed versus uncertain; blind/contextual label separation; exact copying
-of all four review_status values from evaluation summary; rejection of any
-independent status/label reinterpretation; non-Top-50 nullable attack types.
+exact copying of auto_triage and NOT_SELECTED/PENDING from the audited
+auto-triage bundle; no required human evaluation; no fabricated labels or
+supervised metrics. When optional human evaluation is supplied, test
+blind/contextual label separation, exact copying of its four review_status
+values and rejection of independent status/label reinterpretation. Preserve
+non-Top-50 nullable attack types.
 Integration: input tampering, graph counts/denominators independent of renderer,
-zero/empty groups, optional charts unavailable, case category absence/uniqueness,
+zero/empty groups, optional human metrics unavailable, case category absence/uniqueness,
 report relative links and refusal to overwrite existing package. Chart 06
 fixtures must exercise all five canonical behavior families, multi-family rows,
 canonical ordering, duplicate rejection and no under-count from top_reasons;
@@ -342,7 +368,9 @@ Planned commands after checkpoint B; local repository PowerShell:
 & .\.venv\Scripts\python.exe -m pip check
 & .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 & .\.venv\Scripts\python.exe -m pytest tests -q
-& .\.venv\Scripts\python.exe .\src\build_final_package.py --features-dir .\data\processed\stage_1_7 --scores-dir .\data\processed\stage_1_8 --explanations-dir .\data\processed\stage_1_9 --evaluation-dir .\data\processed\stage_1_9_evaluation --output-dir .\data\processed\stage_2_0
+$AuditedStage19Explanations = '.\data\processed\stage_1_9_corrected_driver_v2'
+$AuditedStage19AutoTriage = '.\data\processed\stage_1_9_auto_triage_corrected_driver_v2'
+& .\.venv\Scripts\python.exe .\src\build_final_package.py --features-dir .\data\processed\stage_1_7 --scores-dir .\data\processed\stage_1_8 --explanations-dir $AuditedStage19Explanations --auto-triage-dir $AuditedStage19AutoTriage --output-dir .\data\processed\stage_2_0
 .\scripts\validate_stage_2_0.ps1 -PackageDir .\data\processed\stage_2_0 -Report .\docs\final_project_report.md
 .\scripts\validate_stage_1_6.ps1 -Database .\data\processed\stage_1_5f_detection_store.sqlite3 -FindingsInput .\data\processed\stage_1_4f_detection_findings.jsonl -SummaryInput .\data\processed\stage_1_4f_detection_summary.json -ExpectedRunId 5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc -Port 8000
 ```
@@ -353,6 +381,12 @@ resolves upstream identities from package metadata, reruns required audits,
 checks full regression, JSONL/CSV reconciliation, charts/cases/report links,
 and verifies immutable inputs. Checkpoint C may invoke it without -Report
 for package-only validation; that mode cannot close Stage 2.0.
+The Stage 1.9 directory values above are intended fresh corrected outputs;
+use them only after their independent audits and official Stage 1.9 validator
+pass. Never substitute the superseded pre-correction `stage_1_9` or
+`stage_1_9_auto_triage` bundles. An optional separately audited human
+evaluation may be supplied through --evaluation-dir; it is not part of the
+standard command or closure gate.
 
 Local demo launcher, after validators pass:
 
@@ -424,7 +458,11 @@ gate, evidence and exact remediation scope. Unsupported attack interpretations
 inside Top 50 use the documented fallback; outside Top 50
 suspected_attack_type remains null and no suspicious fallback is assigned. Do
 not force a specific attack category.
-PENDING reviews block closure. Properly documented undefined metrics/conditional-chart omissions caused by UNCERTAIN labels do not justify inventing results and do not alone block a complete, honest package.
+PENDING queue reviews do not block closure. Without accepted human ground
+truth, supervised metrics remain null with NO_HUMAN_GROUND_TRUTH; no review
+labels or attack metrics may be synthesized. If optional human review is
+supplied, properly documented undefined reviewed-sample metrics caused by
+UNCERTAIN labels do not alone block a complete, honest package.
 No dependency installation occurs during planning. At implementation time,
 review the minimal dependency set, Python 3.12 compatibility and exact resolved
 versions before installation. If this requires a scope change, stop for that
@@ -454,8 +492,8 @@ there is no later FortiGate stage.
 - One reproducible Isolation Forest, ranked anomaly scores and clearly
   distinguished investigation priority.
 - Evidence-based reasons and defensible interpretation/fallback.
-- Actual 100-row review and valid scoped metrics/uncertainty reporting;
-  confusion matrix produced where resolved labels support it.
+- Audited automatic triage for all records, with optional genuine human
+  review and valid scoped metrics only where accepted reviews support them.
 - Ranked table, 8–10 graphs including honest driver visualization, four cases,
   machine-readable exports, workflow, final report and working local demo.
 - Full regression and real-data validation PASS; upstream artifacts immutable.

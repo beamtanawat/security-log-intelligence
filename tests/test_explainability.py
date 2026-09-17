@@ -18,11 +18,23 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from ai_features.models import FEATURE_NAMES, HOLDOUT_PARTITION, REFERENCE_PARTITION, FeatureRow  # noqa: E402
 from anomaly.models import AnomalyScoreRow  # noqa: E402
+from detection.models import (  # noqa: E402
+    DetectionEvidence,
+    DetectionFinding,
+    FindingRuleReference,
+    SourceEventReference,
+    build_finding_id,
+)
 from explainability.drivers import (  # noqa: E402
     build_feature_drivers,
     compile_reference_index,
     numeric_extremeness,
     rarity_extremeness,
+)
+from explainability.provenance import (  # noqa: E402
+    FindingIdentityError,
+    FindingRuleIdentityIndex,
+    validate_stage_1_4_identities,
 )
 from explainability.interpretation import (  # noqa: E402
     CANONICAL_BEHAVIORS,
@@ -116,7 +128,93 @@ def context(**overrides: object) -> dict[str, object]:
     return value
 
 
+def finding(
+    record_number: int,
+    source_record_id: str | None,
+    *,
+    rule_id: str = "fortigate.example_observation",
+) -> DetectionFinding:
+    rule = FindingRuleReference(
+        rule_id=rule_id,
+        version="1.0",
+        name="Example source observation",
+        category="SOURCE_PRODUCT_OBSERVATION",
+        severity="INFORMATIONAL",
+    )
+    source_event = SourceEventReference(
+        source_type="fortigate",
+        normalized_schema_version="1.0",
+        source_record_number=record_number,
+        source_record_id=source_record_id,
+    )
+    return DetectionFinding(
+        finding_id=build_finding_id(
+            rule_id=rule.rule_id,
+            rule_version=rule.version,
+            source_type=source_event.source_type,
+            normalized_schema_version=source_event.normalized_schema_version,
+            source_record_number=source_event.source_record_number,
+            source_record_id=source_event.source_record_id,
+        ),
+        rule=rule,
+        source_event=source_event,
+        reason_code="EXAMPLE_SOURCE_OBSERVATION",
+        summary="Configured source-product observation is present.",
+        evidence=(
+            DetectionEvidence(
+                canonical_path="event.subtype_source",
+                observed_value="anomaly",
+                source_fields=("event_subtype",),
+                mapping_operation="COPIED",
+                interpretation_status="VERIFIED",
+            ),
+        ),
+        time_basis="NOT_USED",
+        uncertainties=("This observation is not ground truth.",),
+        false_positive_note="Legitimate source-product classifications can match.",
+    )
+
+
 class DriverFormulaTests(unittest.TestCase):
+    def test_share_driver_distinguishes_real_half_share_from_zero_total_fallback(self) -> None:
+        byte_positive = build_feature_drivers(
+            feature_row(1, sent_byte_share=0.5),
+            metadata(),
+            context(sent_bytes=1, received_bytes=1),
+        )
+        byte_zero_total = build_feature_drivers(
+            feature_row(2, sent_byte_share=0.5),
+            metadata(),
+            context(sent_bytes=0, received_bytes=0),
+        )
+        packet_positive = build_feature_drivers(
+            feature_row(3, sent_packet_share=0.5),
+            metadata(),
+            context(sent_packets=1, received_packets=1),
+        )
+        packet_zero_total = build_feature_drivers(
+            feature_row(4, sent_packet_share=0.5),
+            metadata(),
+            context(sent_packets=0, received_packets=0),
+        )
+        missing_bytes = build_feature_drivers(
+            feature_row(5, sent_byte_share=0.5),
+            metadata(),
+            context(sent_bytes=None, received_bytes=1, sent_bytes_missing=True),
+        )
+        missing_packets = build_feature_drivers(
+            feature_row(6, sent_packet_share=0.5),
+            metadata(),
+            context(sent_packets=None, received_packets=1, sent_packets_missing=True),
+        )
+
+        self.assertIn("sent_byte_share", {driver.feature_name for driver in byte_positive})
+        self.assertNotIn("sent_byte_share", {driver.feature_name for driver in byte_zero_total})
+        self.assertIn("sent_packet_share", {driver.feature_name for driver in packet_positive})
+        self.assertNotIn("sent_packet_share", {driver.feature_name for driver in packet_zero_total})
+        self.assertNotIn("sent_byte_share", {driver.feature_name for driver in missing_bytes})
+        self.assertNotIn("sent_packet_share", {driver.feature_name for driver in missing_packets})
+
     def test_numeric_extremeness_uses_midrank_and_handles_a_constant(self) -> None:
         self.assertEqual(numeric_extremeness(1.0, ((1.0, 10),)), (0.0, 0, 10, 10))
         self.assertEqual(numeric_extremeness(2.0, ((1.0, 10),)), (1.0, 10, 0, 10))
@@ -188,6 +286,79 @@ class DriverFormulaTests(unittest.TestCase):
             context(),
         )
         self.assertNotIn("src_port_rarity", [driver.feature_name for driver in drivers])
+
+
+class FindingIdentityTests(unittest.TestCase):
+    def test_matching_finding_identity_attaches_rule_ids(self) -> None:
+        index = FindingRuleIdentityIndex()
+        index.add(finding(7, "LOGUID_OPAQUE_7"))
+
+        self.assertEqual(
+            index.rule_ids_for(7, "LOGUID_OPAQUE_7"),
+            ("fortigate.example_observation",),
+        )
+        index.assert_all_matched()
+
+    def test_mismatched_source_record_id_fails_closed(self) -> None:
+        index = FindingRuleIdentityIndex()
+        index.add(finding(7, "LOGUID_OPAQUE_7"))
+
+        with self.assertRaises(FindingIdentityError):
+            index.rule_ids_for(7, "LOGUID_OTHER_7")
+
+    def test_unknown_finding_record_fails_closed_after_normalized_records_are_checked(self) -> None:
+        index = FindingRuleIdentityIndex()
+        index.add(finding(99, "LOGUID_OPAQUE_99"))
+
+        self.assertEqual(index.rule_ids_for(7, "LOGUID_OPAQUE_7"), ())
+        with self.assertRaises(FindingIdentityError):
+            index.assert_all_matched()
+
+    def test_conflicting_finding_identity_for_same_record_fails_closed(self) -> None:
+        index = FindingRuleIdentityIndex()
+        index.add(finding(7, "LOGUID_OPAQUE_7"))
+
+        with self.assertRaises(FindingIdentityError):
+            index.add(finding(7, "LOGUID_OTHER_7", rule_id="fortigate.other_observation"))
+
+    def test_duplicate_finding_rule_for_one_identity_fails_closed(self) -> None:
+        index = FindingRuleIdentityIndex()
+        duplicate = finding(7, "LOGUID_OPAQUE_7")
+        index.add(duplicate)
+
+        with self.assertRaises(FindingIdentityError):
+            index.add(duplicate)
+
+    def test_missing_finding_source_record_id_fails_closed(self) -> None:
+        index = FindingRuleIdentityIndex()
+
+        with self.assertRaises(FindingIdentityError):
+            index.add(finding(7, None))
+
+    def test_changed_stage_1_4_identity_fails_closed(self) -> None:
+        validate_stage_1_4_identities(
+            normalized_sha256="c195c6322665530d56f1bd5390b6b1c20728881a21ee36352c7c46e0a7138976",
+            findings_sha256="5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc",
+            summary_sha256="d3585bf577cb1b16aca2a8afb65d18959941e28fc2b9cd6c396c35cf03dd16fe",
+        )
+        with self.assertRaises(FindingIdentityError):
+            validate_stage_1_4_identities(
+                normalized_sha256="0" * 64,
+                findings_sha256="5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc",
+                summary_sha256="d3585bf577cb1b16aca2a8afb65d18959941e28fc2b9cd6c396c35cf03dd16fe",
+            )
+        with self.assertRaises(FindingIdentityError):
+            validate_stage_1_4_identities(
+                normalized_sha256="c195c6322665530d56f1bd5390b6b1c20728881a21ee36352c7c46e0a7138976",
+                findings_sha256="0" * 64,
+                summary_sha256="d3585bf577cb1b16aca2a8afb65d18959941e28fc2b9cd6c396c35cf03dd16fe",
+            )
+        with self.assertRaises(FindingIdentityError):
+            validate_stage_1_4_identities(
+                normalized_sha256="c195c6322665530d56f1bd5390b6b1c20728881a21ee36352c7c46e0a7138976",
+                findings_sha256="5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc",
+                summary_sha256="0" * 64,
+            )
 
 
 class InterpretationTests(unittest.TestCase):

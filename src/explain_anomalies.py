@@ -39,6 +39,11 @@ from explainability.interpretation import (
     assign_investigation_ranks,
     build_explanation,
 )
+from explainability.provenance import (
+    FindingIdentityError,
+    FindingRuleIdentityIndex,
+    validate_stage_1_4_identities,
+)
 from explainability.drivers import compile_reference_index
 from evaluation.review import (
     REVIEW_SELECTION_PROTOCOL_VERSION,
@@ -306,10 +311,15 @@ def build_explanation_bundle(
         if normalized_identity != dict(features.metadata["normalized_input"]):
             raise ExplainBuildError("normalized input identity does not match Stage 1.7 metadata")
         detection_identity = calculate_artifact_identity(findings_path, summary_path)
-        findings_by_record: dict[int, list[str]] = {}
+        validate_stage_1_4_identities(
+            normalized_sha256=str(normalized_identity["sha256"]),
+            findings_sha256=detection_identity.findings_sha256,
+            summary_sha256=detection_identity.summary_sha256,
+        )
+        finding_rules = FindingRuleIdentityIndex()
 
         def capture_finding(finding: object) -> None:
-            findings_by_record.setdefault(finding.source_event.source_record_number, []).append(finding.rule.rule_id)
+            finding_rules.add(finding)
 
         validated_detection = validate_detection_artifacts(
             findings_path, summary_path, detection_identity, on_finding=capture_finding
@@ -327,7 +337,10 @@ def build_explanation_bundle(
                 or score.source_record_id != feature.source_record_id
             ):
                 raise ExplainBuildError("Stage 1.3/1.7/1.8 provenance join does not reconcile")
-            rule_ids = tuple(sorted(set(findings_by_record.get(feature.source_record_number, []))))
+            rule_ids = finding_rules.rule_ids_for(
+                feature.source_record_number,
+                event.event.get("source_record_id"),
+            )
             explanations.append(
                 build_explanation(
                     feature,
@@ -343,6 +356,7 @@ def build_explanation_bundle(
             pass
         else:
             raise ExplainBuildError("normalized input contains extra records")
+        finding_rules.assert_all_matched()
         explanations = assign_investigation_ranks(explanations)
         review_sample, stratum_counts = build_review_sample(explanations, str(normalized_identity["sha256"]))
         review_ids = {int(row["source_record_number"]): str(row["review_id"]) for row in review_sample}
@@ -406,6 +420,7 @@ def build_explanation_bundle(
     except (
         AnomalyInputError,
         DetectionInputError,
+        FindingIdentityError,
         StorageInputValidationError,
         InterpretationError,
         ReviewError,

@@ -111,6 +111,27 @@ def _optional_port(value: object, field_name: str) -> int | None:
     return port
 
 
+def share_feature_is_eligible(left: int | None, right: int | None) -> bool:
+    """Return whether a derived sent-share value is a real observed ratio.
+
+    Stage 1.7 represents an unavailable ratio with the neutral value ``0.5``.
+    That fallback is not eligible for reference-distribution comparison.
+    """
+
+    if left is None or right is None:
+        return False
+    if (
+        isinstance(left, bool)
+        or not isinstance(left, int)
+        or left < 0
+        or isinstance(right, bool)
+        or not isinstance(right, int)
+        or right < 0
+    ):
+        raise FeatureTransformError("share feature inputs must be non-negative integers or null")
+    return left + right > 0
+
+
 def _actual_invalid_source_fields(event: NormalizedSecurityEvent) -> set[str]:
     return {
         issue.source_field
@@ -318,8 +339,12 @@ def build_feature_values(
     complete_packets = not sent_packets_missing and not received_packets_missing
     total_bytes = sent_bytes + received_bytes if complete_bytes else 0
     total_packets = sent_packets + received_packets if complete_packets else 0
-    byte_share_eligible = complete_bytes and total_bytes > 0
-    packet_share_eligible = complete_packets and total_packets > 0
+    byte_share_eligible = share_feature_is_eligible(
+        observation.sent_bytes, observation.received_bytes
+    )
+    packet_share_eligible = share_feature_is_eligible(
+        observation.sent_packets, observation.received_packets
+    )
     sent_per_packet_eligible = not sent_bytes_missing and not sent_packets_missing and sent_packets > 0
     received_per_packet_eligible = (
         not received_bytes_missing and not received_packets_missing and received_packets > 0

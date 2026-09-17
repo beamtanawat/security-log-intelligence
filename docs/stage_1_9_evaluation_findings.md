@@ -1,10 +1,10 @@
 # Stage 1.9 Explainability and Analyst Review Findings
 
-Status: **VALIDATED**. The corrected Stage 1.9 explanation and auto-triage
-bundles were rebuilt from the real 100,000-row inputs, independently audited,
-and accepted by the deterministic official validator. Corrected local
-validation returned exit code 0 with `STAGE 1.9 LOCAL VALIDATION PASS`.
-Human review is optional and has not been performed.
+Status: **VALIDATED**. The post-closure V3 Stage 1.9 correction was rebuilt
+from the real 100,000-row inputs, independently audited, and accepted by the
+deterministic official validator. V3 local validation returned exit code 0
+with `STAGE 1.9 LOCAL VALIDATION PASS`. Human review is optional and has not
+been performed.
 
 The correction fixes a compiled reference-distribution lookup that previously
 assigned `equal_count = less_count` when an observed value was absent from the
@@ -12,8 +12,14 @@ REFERENCE distribution. The corrected behavior is `equal_count = 0`. A
 synthetic regression independently compares compiled counts and extremeness
 with scalar formulas and explicit expected values below, between, above, and
 at REFERENCE values, including 90 zeros plus 10 ones with observed `0.9`.
-This affects Stage 1.9 behavior assignments only; it does not change Stage 1.8
-features, scores, ranks, bands, Top-50 membership, or manifest identity.
+
+The post-closure V3 correction also makes Stage 1.9 share eligibility match
+Stage 1.7: a neutral `0.5` from a zero byte/packet total is ineligible, while a
+real `0.5` share with a positive total remains eligible. Stage 1.4 findings
+are reconciled using both `source_record_number` and `source_record_id`, with
+the approved normalized, findings, and summary SHA-256 identities pinned.
+These corrections do not change Stage 1.8 features, scores, ranks, bands,
+Top-50 membership, or manifest identity.
 
 ## Purpose
 
@@ -76,11 +82,11 @@ malicious activity, and `LOW_INTEREST` does not mean benign or safe. No human
 labels are generated. Without actual human ground truth, precision, recall,
 F1, accuracy, and a confusion matrix are unavailable and are not reported.
 
-The corrected, independently audited automated bundle contains:
+The V3, independently audited automated bundle contains:
 
-- `data/processed/stage_1_9_auto_triage_corrected_driver_v2/stage_1_9_auto_triage.csv`
-- `data/processed/stage_1_9_auto_triage_corrected_driver_v2/stage_1_9_top_anomalies.csv`
-- `data/processed/stage_1_9_auto_triage_corrected_driver_v2/stage_1_9_summary.json`
+- `data/processed/stage_1_9_auto_triage_corrected_v3/stage_1_9_auto_triage.csv`
+- `data/processed/stage_1_9_auto_triage_corrected_v3/stage_1_9_top_anomalies.csv`
+- `data/processed/stage_1_9_auto_triage_corrected_v3/stage_1_9_summary.json`
 
 Its summary contains deterministic coverage, triage, band, evidence,
 behavior, interpretation, review-status, score-quantile, and priority-quantile
@@ -119,29 +125,28 @@ evaluation summary remains the authority for any actual human review state.
 
 ## Artifacts and Validation
 
-Corrected pre-review output was published after temporary build, audit, and
+V3 pre-review output was published after temporary build, audit, and
 no-replace publication in fresh directories:
 
-- `data/processed/stage_1_9_corrected_driver_v2/stage_1_9_explained_anomalies.jsonl`
-- `data/processed/stage_1_9_corrected_driver_v2/stage_1_9_analyst_review_queue.csv`
-- `data/processed/stage_1_9_corrected_driver_v2/stage_1_9_explanation_metadata.json`
+- `data/processed/stage_1_9_corrected_v3/stage_1_9_explained_anomalies.jsonl`
+- `data/processed/stage_1_9_corrected_v3/stage_1_9_analyst_review_queue.csv`
+- `data/processed/stage_1_9_corrected_v3/stage_1_9_explanation_metadata.json`
 
 After optional completed human labels, evaluation may be separately published as
 `data/processed/stage_1_9_evaluation/stage_1_9_evaluation_summary.json`.
 The raw CSV, normalized JSONL, Stage 1.7/1.8 artifacts, and the blind-label
 file remain immutable inputs.
 
-### Corrected validation evidence
+### V3 validation evidence
 
 | Check | Measured result |
 |---|---|
-| Corrected explanation build | PASS; 93.8282885 seconds |
-| Corrected auto-triage build | PASS |
+| V3 explanation build | PASS |
+| V3 auto-triage build | PASS |
 | Independent audit | PASS |
-| Deterministic validator rebuild | PASS |
+| Deterministic V3 validator rebuild | PASS |
 | Official validator | `STAGE 1.9 LOCAL VALIDATION PASS` (exit code 0) |
-| Full unittest suite | 268 passed |
-| Full pytest suite | 268 passed; 123 subtests passed; 2 known deprecation warnings |
+| Pytest suite | 277 passed; 127 subtests passed; 2 known warnings |
 
 The unchanged upstream identities are:
 
@@ -151,18 +156,19 @@ The unchanged upstream identities are:
 | Stage 1.8 score artifact | `f98188b6042dd19afb275f44c4f7a4838356210c5032b1a395b7e8a899d8e8c4` |
 | Stage 1.8 manifest | `9c00081f8e18a092ed8a545b680495820c3514ccef57d78bdf0906804992be77` |
 
-The corrected artifact identities are:
+The V3 artifact identities are:
 
 | Artifact | SHA-256 |
 |---|---|
-| Explanation JSONL | `de6b253b03fc5cb99420fb0a5ee017efd7da5027322ac70edf6235f5b95b666a` |
-| Auto-triage CSV | `64487bd90ad0cb59132f8bf024040b9e06c16daf05d053bf1ec594e3d7948f02` |
-| Auto-triage summary JSON | `76a0cb76e1e171440d1de3678edbdc851699e262bf3e2ecaa882a3d39a708efe` |
-| Top-anomalies CSV | `fcb3510c3e8a0b71c4c1e6361f5e6eeefa12e6b4376dcd46f4b66d8461e338ac` |
+| Explanation JSONL | `4ddf062473ad84715d73c8599ac03ad3f566c79492599da7a37a6712ac2416e0` |
+| Auto-triage CSV | `f38079cb935619670d4cffcc3d0ce34aad99d1431f7ed3ebf47a4afc79123ade` |
+| Auto-triage summary JSON | `da18469b426a00f21f79e3f9988b210774b8f811a0d663c53a9cd91607602bac` |
+| Top-anomalies CSV | `9cbef506fa8a6da28947ea472e3eb67a335c17c672b768f0e3a5693601c41ea7` |
+| Analyst review queue CSV | `b7e57d5f7d64e2f5fd4de372899725cd0c1ed1ba61e901307c53d894875d4145` |
 
-### Corrected real-data findings
+### V3 measured real-data findings
 
-The corrected artifacts contain 100,000 rows: 79,947 `REFERENCE` and 20,053
+The V3 artifacts contain 100,000 rows: 79,947 `REFERENCE` and 20,053
 `HOLDOUT`. The frozen Stage 1.8 Top-50 count remains 50. Anomaly-band counts
 are 94,767 `BASELINE`, 94 `TOP_0_1_PERCENT`, 880 `TOP_1_PERCENT`, and 4,259
 `TOP_5_PERCENT`.
@@ -173,7 +179,7 @@ are 94,767 `BASELINE`, 94 `TOP_0_1_PERCENT`, 880 `TOP_1_PERCENT`, and 4,259
 | `MEDIUM_INTEREST` | 5,183 |
 | `LOW_INTEREST` | 94,767 |
 
-| Explainability measure | Corrected value |
+| Explainability measure | V3 value |
 |---|---:|
 | Records with a specific suspected behavior | 15,123 |
 | Records with suspected behavior or fallback | 15,141 |
@@ -195,7 +201,19 @@ Review statuses are 99,900 `NOT_SELECTED`, 100 `PENDING`, zero
 generated. Supervised classification metrics remain unavailable without
 accepted human ground truth.
 
-### Superseded pre-correction local evidence
+### Superseded V2 artifact identities
+
+The previous corrected V2 Stage 1.9 artifacts are superseded by the V3
+post-closure correction above and must not be used as the current handoff:
+
+| V2 artifact | Superseded SHA-256 |
+|---|---|
+| Explanation JSONL | `de6b253b03fc5cb99420fb0a5ee017efd7da5027322ac70edf6235f5b95b666a` |
+| Auto-triage CSV | `64487bd90ad0cb59132f8bf024040b9e06c16daf05d053bf1ec594e3d7948f02` |
+| Auto-triage summary JSON | `76a0cb76e1e171440d1de3678edbdc851699e262bf3e2ecaa882a3d39a708efe` |
+| Top-anomalies CSV | `fcb3510c3e8a0b71c4c1e6361f5e6eeefa12e6b4376dcd46f4b66d8461e338ac` |
+
+### Superseded pre-V2 local evidence
 
 The user's local Stage 1.9 validator returned exit code 0 and
 `STAGE 1.9 LOCAL VALIDATION PASS` **before** the compiled-reference-count
@@ -216,12 +234,12 @@ The pre-correction hashes were:
 | Top-anomalies CSV | `9cd17242285227436b83c89d18aaaed3ce5b54ac6665633912715c08668d2e2e` |
 
 The pre-correction figures above are superseded and must not be presented as
-corrected results. The corrected real-data results are the measured values in
-the preceding corrected findings section.
+V3 results. The V3 real-data results are the measured values in the preceding
+V3 findings section.
 
-### Measured pre-fix versus corrected explainability changes
+### Measured pre-fix versus V3 explainability changes
 
-| Measure | Pre-fix | Corrected | Change |
+| Measure | Pre-fix | V3 | Change |
 |---|---:|---:|---:|
 | Records with a specific suspected behavior | 15,150 | 15,123 | -27 |
 | Records with suspected behavior or fallback | 15,168 | 15,141 | -27 |
@@ -241,8 +259,8 @@ Stage 1.9 explainability-driver extremeness.
 
 ## Handoff Status
 
-Stage 1.9 corrected implementation is **VALIDATED**. Corrected artifacts are
-built and audited, and the local validator passed. Human review remains
+Stage 1.9 V3 implementation is **VALIDATED**. V3 artifacts are built and
+audited, and the local validator passed. Human review remains
 optional and is not completed. Supervised classification metrics are
 unavailable without accepted human ground truth. The Stage 2.0 automated
 handoff is ready subject to final review and human approval. This status does

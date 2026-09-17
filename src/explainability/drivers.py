@@ -14,6 +14,7 @@ from typing import Mapping, Sequence
 
 from ai_features.contract import FEATURE_DEFINITIONS
 from ai_features.models import FEATURE_NAMES, FeatureRow
+from ai_features.transform import share_feature_is_eligible
 
 
 class DriverError(ValueError):
@@ -292,10 +293,14 @@ def _eligible_feature(name: str, values: tuple[float, ...], context: Mapping[str
     }
     if name in missing:
         return not bool(context[missing[name]])
-    if name in {"log_total_bytes", "sent_byte_share"}:
+    if name == "log_total_bytes":
         return not bool(context["sent_bytes_missing"]) and not bool(context["received_bytes_missing"])
-    if name in {"log_total_packets", "sent_packet_share"}:
+    if name == "sent_byte_share":
+        return share_feature_is_eligible(context["sent_bytes"], context["received_bytes"])
+    if name == "log_total_packets":
         return not bool(context["sent_packets_missing"]) and not bool(context["received_packets_missing"])
+    if name == "sent_packet_share":
+        return share_feature_is_eligible(context["sent_packets"], context["received_packets"])
     if name == "log_sent_bytes_per_packet":
         return not bool(context["sent_bytes_missing"]) and not bool(context["sent_packets_missing"]) and int(context["sent_packets"] or 0) > 0
     if name == "log_received_bytes_per_packet":

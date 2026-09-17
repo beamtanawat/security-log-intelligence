@@ -56,6 +56,16 @@ foreach ($required in @($normalized, $findings, $summary)) {
     }
 }
 
+if ((Get-FileHash -LiteralPath $normalized -Algorithm SHA256).Hash.ToLowerInvariant() -cne "c195c6322665530d56f1bd5390b6b1c20728881a21ee36352c7c46e0a7138976") {
+    throw "Normalized input SHA-256 does not match the approved Stage 1.4 identity"
+}
+if ((Get-FileHash -LiteralPath $findings -Algorithm SHA256).Hash.ToLowerInvariant() -cne "5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc") {
+    throw "Stage 1.4 findings SHA-256 does not match the approved identity"
+}
+if ((Get-FileHash -LiteralPath $summary -Algorithm SHA256).Hash.ToLowerInvariant() -cne "d3585bf577cb1b16aca2a8afb65d18959941e28fc2b9cd6c396c35cf03dd16fe") {
+    throw "Stage 1.4 summary SHA-256 does not match the approved identity"
+}
+
 if ($metadata.feature_artifact.sha256 -cne "1a147b23b92588e8c35b644664cf9b58e3fbc8a5aeb5ab8def9c755ca9885fb1") {
     throw "Stage 1.7 feature SHA-256 does not match the approved identity"
 }

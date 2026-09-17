@@ -21,6 +21,11 @@ from anomaly.artifact import (
 )
 from detection.input import iter_normalized_events
 from explainability.interpretation import CANONICAL_BEHAVIORS, EXPLANATION_SCHEMA_VERSION
+from explainability.provenance import (
+    FindingIdentityError,
+    FindingRuleIdentityIndex,
+    validate_stage_1_4_identities,
+)
 from evaluation.review import QUEUE_COLUMNS, read_blind_labels
 from storage.input import (
     StorageInputValidationError,
@@ -588,14 +593,19 @@ def audit_explanation_upstream(
     for path in (feature_path, feature_metadata_path, score_path, score_metadata_path, manifest_path):
         if path.is_symlink() or not path.is_file():
             raise ExplainabilityAuditError("declared upstream bundle artifact is unavailable or unsafe")
-    findings_by_record: dict[int, list[str]] = {}
+    finding_rules = FindingRuleIdentityIndex()
 
     def capture_finding(finding: object) -> None:
-        findings_by_record.setdefault(finding.source_event.source_record_number, []).append(finding.rule.rule_id)
+        finding_rules.add(finding)
 
     try:
         score_rows = tuple(read_score_rows(score_path))
         detection_identity = calculate_artifact_identity(findings, detection_summary)
+        validate_stage_1_4_identities(
+            normalized_sha256=file_sha256(normalized),
+            findings_sha256=detection_identity.findings_sha256,
+            summary_sha256=detection_identity.summary_sha256,
+        )
         validate_detection_artifacts(
             findings,
             detection_summary,
@@ -628,7 +638,12 @@ def audit_explanation_upstream(
     try:
         joined = zip(rows, score_rows, event_iterator, strict=True)
         for explanation, score, event in joined:
-            expected_rule_ids = sorted(set(findings_by_record.get(score.source_record_number, [])))
+            expected_rule_ids = list(
+                finding_rules.rule_ids_for(
+                    score.source_record_number,
+                    event.event.get("source_record_id"),
+                )
+            )
             expected_source_threat = "fortigate.source_threat_observation" in expected_rule_ids
             expected_anomaly_subtype = "fortigate.anomaly_subtype_observation" in expected_rule_ids
             context = explanation["reference_context"]
@@ -653,6 +668,7 @@ def audit_explanation_upstream(
                 or explanation["raw_abnormality"] != score.raw_abnormality
             ):
                 raise ExplainabilityAuditError("explanation row changed immutable Stage 1.8 score/rank/Top-50 fields")
+        finding_rules.assert_all_matched()
     except (KeyError, OSError, TypeError, ValueError) as error:
         if isinstance(error, ExplainabilityAuditError):
             raise

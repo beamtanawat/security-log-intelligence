@@ -368,8 +368,8 @@ Planned commands after checkpoint B; local repository PowerShell:
 & .\.venv\Scripts\python.exe -m pip check
 & .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 & .\.venv\Scripts\python.exe -m pytest tests -q
-$AuditedStage19Explanations = '.\data\processed\stage_1_9_corrected_driver_v2'
-$AuditedStage19AutoTriage = '.\data\processed\stage_1_9_auto_triage_corrected_driver_v2'
+$AuditedStage19Explanations = '.\data\processed\stage_1_9_corrected_v3'
+$AuditedStage19AutoTriage = '.\data\processed\stage_1_9_auto_triage_corrected_v3'
 & .\.venv\Scripts\python.exe .\src\build_final_package.py --features-dir .\data\processed\stage_1_7 --scores-dir .\data\processed\stage_1_8 --explanations-dir $AuditedStage19Explanations --auto-triage-dir $AuditedStage19AutoTriage --output-dir .\data\processed\stage_2_0
 .\scripts\validate_stage_2_0.ps1 -PackageDir .\data\processed\stage_2_0 -Report .\docs\final_project_report.md
 .\scripts\validate_stage_1_6.ps1 -Database .\data\processed\stage_1_5f_detection_store.sqlite3 -FindingsInput .\data\processed\stage_1_4f_detection_findings.jsonl -SummaryInput .\data\processed\stage_1_4f_detection_summary.json -ExpectedRunId 5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc -Port 8000

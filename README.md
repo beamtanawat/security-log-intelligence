@@ -23,9 +23,12 @@ before introducing detection rules, machine learning, LLMs, or deployment.
 
 ## Current Stage
 
-### Stage 1 — FortiGate Security Log Exploration and Validation
+### Stage 2.0 — Final Results Package (V5 validation passed)
 
-Current priorities:
+The project has progressed through the exploration, normalization, rule,
+storage, API, feature, anomaly-scoring, and explainability foundations. The
+current local work is the final Stage 2.0 package described below. The original
+Stage 1 exploration priorities were:
 
 1. Load the dataset safely
 2. Inspect the schema
@@ -38,7 +41,9 @@ Current priorities:
 9. Identify data quality issues
 10. Document findings
 
-No machine learning is used at this stage.
+Stage 1.8 includes an Isolation Forest anomaly-detection baseline. Its
+scores rank relative abnormality for investigation; they are not attack
+probabilities or attack classifications.
 
 ### Stage 1.3 — Evidence-Preserving FortiGate Normalization — Complete
 
@@ -94,6 +99,24 @@ SQLite artifacts remain ignored and untracked. See
 Stage 1.5 does not implement an API, dashboard, authentication, mutable database
 workflow, new detection rule, correlation, incident process, ML, LLM, or deployment.
 A read-only API remains a separately planned next stage.
+
+### Stage 2.0 — Final Results Package — V5 Validated
+
+The final package presents measured Stage 1.9 V3 anomaly, explainability, and
+investigation-priority results as ranked JSONL/CSV exports, reconciled tables,
+ten charts, case studies, and a reproducible technical report. It preserves
+the boundaries `ANOMALY != ATTACK` and `ANOMALY SCORE != ATTACK PROBABILITY`.
+See [`docs/final_project_report.md`](docs/final_project_report.md) and the
+approved [`Stage 2.0 plan`](docs/plans/stage_2_0_final_project_package_plan.md).
+
+The validated Stage 2.0 V5 package stays local and ignored under
+`data/processed/stage_2_0_v5/`. Stage 2.0 V5 validation passed: 286 tests
+passed, 130 subtests passed, and two known upstream deprecation warnings were
+reported. Its measured package summary is `record_count = 100000`,
+`top_50_count = 50`, and `graph_count = 10`. To
+reproduce the package, use the fresh-output builder and validator commands in
+the final report with the validated Stage 1.9 V3 input directories; do not
+substitute superseded V2 artifacts or overwrite the validated V5 package.
 
 ## Current Dataset
 

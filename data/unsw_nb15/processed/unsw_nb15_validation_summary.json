@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "UNSW_NB15_VALIDATION_SUMMARY",
+  "validation_status": "PASS_WITH_SENSITIVITY_REQUIRED",
+  "dataset_id": "UNSW_NB15_BENCHMARK",
+  "branch_id": "BRANCH_B_LABELED_BENCHMARK",
+  "validated_at_utc": "2026-09-27T16:38:29Z",
+  "raw_input_immutability": "PASS",
+  "train": {
+    "filename_exact": true,
+    "present": true,
+    "non_empty": true,
+    "rows_excluding_header": 175341,
+    "expected_rows": 175341,
+    "csv_parse": "PASS",
+    "duplicate_header_rows": 0,
+    "malformed_rows": 0,
+    "sha256": "bec7dd5ec88dc2a0ccc7a07879d338395ed7421750f675fd0339e07dfe0648fa"
+  },
+  "test": {
+    "filename_exact": true,
+    "present": true,
+    "non_empty": true,
+    "rows_excluding_header": 82332,
+    "expected_rows": 82332,
+    "csv_parse": "PASS",
+    "duplicate_header_rows": 0,
+    "malformed_rows": 0,
+    "sha256": "734fe6642edf758f7c94d7d9149426b49d202fe8e7bf0bef47392489c3c0a559",
+    "class_distribution_published": false
+  },
+  "schema": {
+    "status": "PASS",
+    "column_count": 45,
+    "identical_train_test_schema": true,
+    "label_field": "label",
+    "attack_category_field": "attack_cat",
+    "binary_normal_attack_mapping_derivable": true
+  },
+  "duplicate_and_leakage_audit": {
+    "exact_decoded_row_duplicates": {
+      "TRAIN": 0,
+      "TEST": 0,
+      "cross_official_split": 0
+    },
+    "canonical_feature_row_duplicates_excluding_id_target_category": {
+      "TRAIN": 74301,
+      "TEST": 28386,
+      "cross_official_split": 1302,
+      "cross_split_target_conflicts": 279
+    },
+    "stable_entity_flow_key_audit": "NOT_APPLICABLE_FIELDS_NOT_PRESENT_IN_PREPARED_SCHEMA",
+    "near_duplicate_policy": "CANONICAL_FEATURE_OVERLAP_RETAINED_FOR_SENSITIVITY_AUDIT",
+    "cross_split_policy": "RETAIN_OFFICIAL_TEST_REQUIRE_DUPLICATE_EXCLUDED_SENSITIVITY_RESULT",
+    "rows_moved_or_deleted": false
+  },
+  "test_lock": {
+    "status": "PASS",
+    "operations_performed": [
+      "filename check",
+      "byte-size check",
+      "CSV parse",
+      "schema inventory",
+      "row count",
+      "duplicate-header check",
+      "malformed-row check",
+      "SHA-256 computation",
+      "structural duplicate audit"
+    ],
+    "model_or_feature_decisions": false,
+    "test_class_distribution_reported": false
+  },
+  "dataset_separation": {
+    "status": "PASS",
+    "fortigate_and_unsw_rows_concatenated": false,
+    "fortigate_preprocessing_state_reused": false,
+    "unsw_specific_schema_contract": true
+  },
+  "stage_2_1_closure": {
+    "fortigate_label_path": "CLOSED / HISTORICAL / LABEL-FEASIBILITY STUDY",
+    "fortigate_canonical_labels": "NOT_PUBLISHED",
+    "unsw_acquisition_contract": "VALIDATED",
+    "status": "COMPLETE",
+    "sensitivity_requirement_for_future_benchmark_reporting": true
+  }
+}

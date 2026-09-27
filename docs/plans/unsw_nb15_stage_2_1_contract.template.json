@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "contract_id": "S2.1-UNSW-NB15-CONTRACT-V1",
+  "dataset_id": "UNSW_NB15_BENCHMARK",
+  "branch_id": "BRANCH_B_LABELED_BENCHMARK",
+  "source": {
+    "source_name": "<HUMAN_APPROVED_SOURCE>",
+    "source_version": "<HUMAN_APPROVED_VERSION>",
+    "source_uri": "<HUMAN_APPROVED_URI>",
+    "license_record": "<HUMAN_APPROVED_LICENSE_RECORD>",
+    "human_approved": false
+  },
+  "raw_root": "data/raw/unsw_nb15",
+  "processed_root": "data/processed/unsw_nb15",
+  "files": [
+    {
+      "split": "TRAIN",
+      "filename": "UNSW_NB15_training-set.csv",
+      "raw_relative_path": "data/raw/unsw_nb15/UNSW_NB15_training-set.csv",
+      "sha256": "<SHA256_FROM_ACQUISITION>",
+      "byte_size": "<BYTE_SIZE_FROM_ACQUISITION>",
+      "row_count": "<ROW_COUNT_FROM_VALIDATION>",
+      "labels_quarantined": false
+    },
+    {
+      "split": "TEST",
+      "filename": "UNSW_NB15_testing-set.csv",
+      "raw_relative_path": "data/raw/unsw_nb15/UNSW_NB15_testing-set.csv",
+      "sha256": "<SHA256_FROM_ACQUISITION>",
+      "byte_size": "<BYTE_SIZE_FROM_ACQUISITION>",
+      "row_count": "<ROW_COUNT_FROM_VALIDATION>",
+      "labels_quarantined": true
+    }
+  ],
+  "schema": {
+    "binary_target_field": "label",
+    "binary_target_values": ["NORMAL", "ATTACK"],
+    "binary_target_mapping": {
+      "0": "NORMAL",
+      "1": "ATTACK",
+      "NORMAL": "NORMAL",
+      "ATTACK": "ATTACK"
+    },
+    "attack_category_field": "attack_cat",
+    "attack_category_policy": "PRESERVE_RAW_SEPARATE_NON_FEATURE",
+    "unknown_source_fields": "PRESERVE_UNLESS_DENIED_BY_LEAKAGE_AUDIT",
+    "coercion_policy": "REJECT_SILENT_COERCION"
+  },
+  "feature_denylist": [
+    "label",
+    "attack_cat",
+    "target",
+    "binary_target",
+    "is_attack",
+    "attack_label",
+    "split",
+    "split_id",
+    "source_split",
+    "row_id",
+    "record_id",
+    "post_outcome",
+    "predicted_label",
+    "prediction",
+    "anomaly_score",
+    "anomaly_rank",
+    "top_n_membership",
+    "anomaly_band",
+    "auto_triage",
+    "suspected_behavior",
+    "suspected_attack_type",
+    "stage_1_9_explanation"
+  ],
+  "leakage_policy": {
+    "exact_duplicate": "AUDIT",
+    "target_conflicting_duplicate": "BLOCK",
+    "near_duplicate": "AUDIT_AND_REPORT",
+    "stable_entity_or_flow_key_overlap": "AUDIT_AND_REPORT",
+    "cross_split_overlap": "BLOCK_INGESTION",
+    "silent_delete_or_move": false
+  },
+  "duplicate_policy": {
+    "exact_decoded_row": "AUDIT",
+    "canonical_feature_row_digest": "AUDIT",
+    "cross_split_overlap": "BLOCK_INGESTION",
+    "target_conflict": "BLOCK",
+    "silent_delete_or_move": false
+  },
+  "preprocessing_fit_scope": "TRAIN_OR_FOLD_LOCAL_ONLY",
+  "test_policy": "LOCKED_FROM_MODEL_SELECTION",
+  "test_label_access": "QUARANTINED_FROM_STAGE_2_2_TO_2_4_SELECTION",
+  "validation_policy": {
+    "development_source": "OFFICIAL_TRAIN_ONLY",
+    "deterministic": true,
+    "membership_manifest_required": true
+  },
+  "checksum_policy": {
+    "algorithm": "SHA-256",
+    "hash_scope": "RAW_FILE_BYTES",
+    "manifest_immutable": true
+  }
+}

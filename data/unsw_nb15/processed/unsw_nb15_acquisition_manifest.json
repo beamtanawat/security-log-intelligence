@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "UNSW_NB15_ACQUISITION_MANIFEST",
+  "manifest_status": "VALIDATED",
+  "dataset_id": "UNSW_NB15_BENCHMARK",
+  "dataset_name": "UNSW-NB15",
+  "branch_id": "BRANCH_B_LABELED_BENCHMARK",
+  "source": {
+    "source_name": "UNSW Research",
+    "source_page": "https://research.unsw.edu.au/projects/unsw-nb15-dataset",
+    "source_version": "Prepared UNSW_NB15 training/testing partitions; UNSW Research page last updated 2021-06-02",
+    "distribution_policy": "Official UNSW distribution only",
+    "license_note": "Academic/public research use with required citation; commercial use requires author agreement.",
+    "acquisition_authorized": true,
+    "download_timestamp_utc": null,
+    "download_timestamp_note": "Human download time was not supplied; validation timestamp is recorded in the validation summary."
+  },
+  "raw_root": "data/unsw_nb15/raw",
+  "processed_root": "data/unsw_nb15/processed",
+  "checksum_policy": {
+    "algorithm": "SHA-256",
+    "scope": "raw file bytes",
+    "fingerprint_type": "locally computed acquisition fingerprint",
+    "manifest_immutable": true
+  },
+  "files": [
+    {
+      "role": "TRAIN",
+      "filename": "UNSW_NB15_training-set.csv",
+      "relative_path": "data/unsw_nb15/raw/UNSW_NB15_training-set.csv",
+      "expected_row_count": 175341,
+      "observed_row_count": 175341,
+      "byte_size": 32293018,
+      "sha256": "bec7dd5ec88dc2a0ccc7a07879d338395ed7421750f675fd0339e07dfe0648fa",
+      "raw_artifact_identity": "RAW-bec7dd5ec88dc2a0ccc7a07879d338395ed7421750f675fd0339e07dfe0648fa",
+      "immutable_raw_input": true
+    },
+    {
+      "role": "TEST",
+      "filename": "UNSW_NB15_testing-set.csv",
+      "relative_path": "data/unsw_nb15/raw/UNSW_NB15_testing-set.csv",
+      "expected_row_count": 82332,
+      "observed_row_count": 82332,
+      "byte_size": 15380800,
+      "sha256": "734fe6642edf758f7c94d7d9149426b49d202fe8e7bf0bef47392489c3c0a559",
+      "raw_artifact_identity": "RAW-734fe6642edf758f7c94d7d9149426b49d202fe8e7bf0bef47392489c3c0a559",
+      "immutable_raw_input": true
+    }
+  ],
+  "schema": {
+    "column_count": 45,
+    "columns": [
+      "id",
+      "dur",
+      "proto",
+      "service",
+      "state",
+      "spkts",
+      "dpkts",
+      "sbytes",
+      "dbytes",
+      "rate",
+      "sttl",
+      "dttl",
+      "sload",
+      "dload",
+      "sloss",
+      "dloss",
+      "sinpkt",
+      "dinpkt",
+      "sjit",
+      "djit",
+      "swin",
+      "stcpb",
+      "dtcpb",
+      "dwin",
+      "tcprtt",
+      "synack",
+      "ackdat",
+      "smean",
+      "dmean",
+      "trans_depth",
+      "response_body_len",
+      "ct_srv_src",
+      "ct_state_ttl",
+      "ct_dst_ltm",
+      "ct_src_dport_ltm",
+      "ct_dst_sport_ltm",
+      "ct_dst_src_ltm",
+      "is_ftp_login",
+      "ct_ftp_cmd",
+      "ct_flw_http_mthd",
+      "ct_src_ltm",
+      "ct_srv_dst",
+      "is_sm_ips_ports",
+      "attack_cat",
+      "label"
+    ],
+    "binary_target_field": "label",
+    "binary_target_mapping": {
+      "0": "NORMAL",
+      "1": "ATTACK",
+      "NORMAL": "NORMAL",
+      "ATTACK": "ATTACK"
+    },
+    "attack_category_field": "attack_cat",
+    "attack_category_policy": "PRESERVE_RAW_SEPARATE_NON_FEATURE",
+    "silent_coercion": "REJECT"
+  },
+  "feature_contract": {
+    "name": "UNSW_NB15_BENCHMARK_SPECIFIC",
+    "fortigate_36_feature_schema_reused": false,
+    "target_and_category_excluded": true,
+    "target_derived_and_post_outcome_fields_excluded": true,
+    "row_and_split_identifiers_excluded": true
+  },
+  "test_lock": {
+    "status": "ENFORCED",
+    "structural_validation_only": true,
+    "labels_used_for_model_selection": false,
+    "labels_used_for_preprocessing": false,
+    "labels_used_for_tuning": false,
+    "labels_used_for_thresholds": false,
+    "labels_used_for_calibration": false,
+    "labels_used_for_model_choice": false
+  },
+  "preprocessing": {
+    "fit_scope": "TRAIN_OR_FOLD_LOCAL_ONLY",
+    "fortigate_fitted_state_reused": false
+  },
+  "dataset_separation": {
+    "fortigate_rows_concatenated": false,
+    "cross_branch_artifacts_used": false,
+    "separate_raw_processed_namespaces": true
+  },
+  "citation_note": "Cite the UNSW-NB15 papers listed on the authoritative UNSW Research page."
+}

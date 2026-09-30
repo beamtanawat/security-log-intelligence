@@ -1,0 +1,264 @@
+{
+  "language_tokens": [
+    "ANOMALY != ATTACK",
+    "ANOMALY SCORE != ATTACK PROBABILITY",
+    "RULE MATCH != CONFIRMED ATTACK",
+    "HIGH_INTEREST != CONFIRMED ATTACK",
+    "LOW_INTEREST != CONFIRMED BENIGN",
+    "SOURCE THREAT OBSERVATION != GROUND TRUTH",
+    "ABSENCE OF ALERT != BENIGN",
+    "NO STATISTICAL SIGNIFICANCE CLAIM"
+  ],
+  "schema_version": "stage_2.5-claims/1.0",
+  "supported": [
+    {
+      "evidence": [
+        {
+          "json_pointer": "/",
+          "path": "data/processed/stage_2_2/fortigate/v1/manifest.json",
+          "sha256": "cbfab55f485f2a6c56f27fb0f71ec0932a8c06218b624658a1b90e6f07464e6e"
+        }
+      ],
+      "id": "fortigate_anomaly_review",
+      "qualification": "Anomaly review only; no supervised attack claim.",
+      "scope": "BRANCH_A / FortiGate real sanitized logs",
+      "statement": "The pipeline can score and prioritize real FortiGate logs for anomaly review."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "unsw_quantitative_supervised_evaluation",
+      "qualification": "Benchmark result only; not FortiGate production performance.",
+      "scope": "BRANCH_B / UNSW-NB15",
+      "statement": "Supervised models were quantitatively evaluated on UNSW-NB15."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/fit_accounting_2_4B.json",
+          "sha256": "23568b1c061c01c1880c913754ccc19e5c3a1d68fa77f404d02ba1dbb151cf2e"
+        }
+      ],
+      "id": "leakage_safe_chain_signals",
+      "qualification": "Same-row and same-group fit/signal overlap were zero.",
+      "scope": "Stage 2.4 chain development",
+      "statement": "Stage 2.4 used leakage-safe OOF/cross-fitted anomaly signals."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s1_development.json",
+          "sha256": "f2dde13535e028823565780b254d9702b347eb307841f7abee4ac7365bf41a03"
+        }
+      ],
+      "id": "chain_s1_development_increase",
+      "qualification": "Descriptive frozen comparison; no significance claim.",
+      "scope": "UNSW VALIDATION_COMPARISON",
+      "statement": "CHAIN-S1 produced a small AP increase over BASE S1 in the frozen development comparison."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s2_development.json",
+          "sha256": "dd511b5bb903de5536c8e2f3c43f8cad44b95194ad5623431875503c2d9e7f53"
+        }
+      ],
+      "id": "chain_s2_development_decrease",
+      "qualification": "Descriptive frozen comparison; no significance claim.",
+      "scope": "UNSW VALIDATION_COMPARISON",
+      "statement": "CHAIN-S2 produced a small AP decrease relative to BASE S2 in the frozen development comparison."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/metrics/average_precision",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        }
+      ],
+      "id": "locked_test_deltas_descriptive",
+      "qualification": "The official TEST split was used in earlier fixed-stage evaluations and was not newly unseen at project level.",
+      "scope": "UNSW official TEST / Stage 2.4E",
+      "statement": "Locked TEST reporting records the frozen descriptive AP deltas."
+    }
+  ],
+  "unsupported_or_forbidden": [
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "anomaly_equals_attack",
+      "qualification": "ANOMALY != ATTACK",
+      "scope": "All project claims",
+      "statement": "Anomaly is not confirmed cyberattack evidence."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "anomaly_score_equals_probability",
+      "qualification": "ANOMALY SCORE != ATTACK PROBABILITY",
+      "scope": "All project claims",
+      "statement": "Anomaly score is not an attack probability."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "rule_match_confirmed_attack",
+      "qualification": "RULE MATCH != CONFIRMED ATTACK",
+      "scope": "All project claims",
+      "statement": "A rule match is not confirmed attack ground truth."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "high_interest_confirmed_attack",
+      "qualification": "HIGH_INTEREST != CONFIRMED ATTACK",
+      "scope": "All project claims",
+      "statement": "HIGH_INTEREST is not confirmed attack."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "low_interest_confirmed_benign",
+      "qualification": "LOW_INTEREST != CONFIRMED BENIGN",
+      "scope": "All project claims",
+      "statement": "LOW_INTEREST is not confirmed benign."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "source_threat_ground_truth",
+      "qualification": "SOURCE THREAT OBSERVATION != GROUND TRUTH",
+      "scope": "All project claims",
+      "statement": "A source threat observation is not ground truth."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "absence_of_alert_benign",
+      "qualification": "ABSENCE OF ALERT != BENIGN",
+      "scope": "All project claims",
+      "statement": "Absence of an alert is not benign evidence."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "unsw_equals_fortigate_production",
+      "qualification": "UNSW metrics do NOT establish FortiGate production performance.",
+      "scope": "All project claims",
+      "statement": "UNSW performance does not establish FortiGate production performance."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "fortigate_supervised_performance",
+      "qualification": "FortiGate supervised performance claim: NO",
+      "scope": "All project claims",
+      "statement": "No FortiGate supervised accuracy/F1 claim is supported."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "chaining_statistically_proven",
+      "qualification": "NO STATISTICAL SIGNIFICANCE CLAIM",
+      "scope": "All project claims",
+      "statement": "Chaining is not statistically proven superior."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "every_attack_detected",
+      "qualification": "No universal attack-detection claim.",
+      "scope": "All project claims",
+      "statement": "The project does not claim to detect every attack."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "production_ready",
+      "qualification": "No production-readiness claim.",
+      "scope": "All project claims",
+      "statement": "The package is not a production-readiness claim."
+    },
+    {
+      "evidence": [
+        {
+          "json_pointer": "/claim_limits",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+          "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+        }
+      ],
+      "id": "test_newly_unseen_project_level",
+      "qualification": "Prior fixed-stage TEST exposure is disclosed.",
+      "scope": "All project claims",
+      "statement": "The official TEST split was not newly unseen at the overall project level."
+    }
+  ]
+}

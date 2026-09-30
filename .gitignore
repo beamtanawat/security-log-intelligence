@@ -2,5 +2,10 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+.DS_Store
+.pytest_cache/
 data/processed/
 data/raw/network_log_SAFE.csv
+data/unsw_nb15/raw/
+data/unsw_nb15/processed/

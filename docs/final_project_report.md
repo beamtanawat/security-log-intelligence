@@ -1,307 +1,197 @@
-# Security Log Intelligence — Final Stage 2.0 Results
+# Security Log Intelligence
 
-Status: **local portfolio package generated from validated Stage 1.9 V3 artifacts**.
+Status: **Stage 2.5C documentation generated from the frozen Stage 2.5 registry.**
 
-## Problem and Dataset
+Registry SHA-256: `c7a29a52b6ef9d3a95dc8c53f2f44c19ee7e91583a4d7231b7f7135b75dedb10`
+
+## Executive Summary
 
-This package presents reproducible anomaly, explanation, and investigation-priority outputs for 100,000 sanitized FortiGate records. Sanitized identifiers remain opaque, and raw data remains immutable.
+Security Log Intelligence separates operational anomaly review from quantitative
+benchmark evaluation. Branch A retains sanitized FortiGate logs for
+unsupervised anomaly scoring, prioritization, explainability, and case-study
+review. Branch B uses UNSW-NB15 as a labeled benchmark for U1/U2, BASE S1/S2,
+and CHAIN-S1/S2 evaluation. **DATASETS MERGED: NO.**
 
-## Data Limitations and Interpretation Boundaries
+Stage 2.1 established that precision-first FortiGate labeling did not provide
+sufficient defensible ATTACK/BENIGN coverage for primary supervised evaluation.
+Weak labels were not forced into that role. The benchmark branch therefore
+enables measured supervised comparisons without converting real-log anomalies
+into ground truth.
 
-**ANOMALY != ATTACK.** An anomaly score is relative abnormality, not attack probability. HIGH_INTEREST is investigation priority, not confirmed attack; LOW_INTEREST is not confirmed benign. Suspected behaviors and source-product observations are descriptive evidence, not confirmed malicious activity.
+The frozen chained development comparison improved S1 by
+`0.00021276179167273312` AP and degraded S2 by `-4.298499608823558e-05` AP.
+These are descriptive, dataset-scoped results; **NO STATISTICAL SIGNIFICANCE
+CLAIM** is made. Locked TEST deltas are also descriptive and do not create a
+new model-selection decision.
 
-## KPI Summary
+## 1. Problem and Motivation
 
-- Total records: **100,000** (REFERENCE 79,947; HOLDOUT 20,053)
-- Top-50 anomaly records: **50**
-- HIGH_INTEREST / MEDIUM_INTEREST / LOW_INTEREST: **50 / 5,183 / 94,767**
-- Explanation coverage: **15,141 (15.141%)**; specific behavior: **15,123**; Top-50 fallback: **18**
-- Anomaly-score quantiles (min / p50 / p95 / max): **0.231403 / 50.404643 / 95.248102 / 100.0**
-- Investigation-priority quantiles (min / p50 / p95 / max): **0.208263 / 45.364179 / 85.723292 / 99.995497**
+Security teams must review large volumes of network events while preserving
+evidence, uncertainty, and reproducibility. This project prioritizes unusual
+events for analyst review and evaluates supervised methods only where a labeled
+benchmark exists. It does not claim production attack detection or invent
+attack labels from anomaly scores, deny actions, rule matches, or source
+observations.
 
-## Architecture
+## 2. Project Architecture
 
-```mermaid
-flowchart TD
-  raw[Immutable FortiGate CSV] --> parse[Streaming parser] --> norm[Normalized events]
-  norm --> rules[Rule observations] --> store[SQLite] --> api[Read-only API]
-  norm --> features[Stage 1.7 features] --> scores[Stage 1.8 Isolation Forest scores] --> explanations[Stage 1.9 explanations] --> triage[Automated triage] --> package[Stage 2.0 package]
-  rules -. source observations only .-> explanations
-```
+The two branches are intentionally separate:
 
-## Workflow
+- **Branch A — FortiGate real sanitized logs:** REAL-LOG UNSUPERVISED /
+  ANOMALY ANALYSIS.
+- **Branch B — UNSW-NB15:** LABELED BENCHMARK QUANTITATIVE EVALUATION.
 
-```mermaid
-flowchart LR
-  v3[Validated V3 artifacts] --> reconcile[Identity, row, rank and aggregate reconciliation]
-  reconcile --> exports[JSONL, CSV and tables]
-  reconcile --> charts[Ten reproducible charts] --> report[This report]
-  queue[Optional blinded review queue] -. optional human review .-> evaluation[Optional audited human evaluation]
-  evaluation -. separate validation evidence only .-> reconcile
-```
+**DATASETS MERGED: NO.** The architecture diagram is
+[`01_two_branch_architecture.mmd`](results/stage_2_5/figures/01_two_branch_architecture.mmd).
 
-## Rule Baseline
+## 3. Data
 
-Existing Stage 1.4 rule observations are preserved as reference context. They are not labels, training features, or confirmed attacks.
+FortiGate is a sanitized real-log source kept local under
+`data/raw/network_log_SAFE.csv`; it supports anomaly review and contextual
+case studies. UNSW-NB15 is a public benchmark kept separate under
+`data/unsw_nb15/raw/`; it supports labeled quantitative evaluation. Neither
+dataset is treated as a sample of the other environment. Raw data is immutable,
+local, and not committed. UNSW metrics do NOT establish FortiGate production performance.
+
+## 4. Stage 2.1 — Label Feasibility
 
-## Feature Engineering
+Precision-first labeling was investigated for FortiGate. Defensible
+ATTACK/BENIGN coverage was insufficient for primary supervised evaluation, so
+weak labels were not forced into training or performance claims. FortiGate
+remained the real-log anomaly branch and UNSW-NB15 became the labeled benchmark
+branch. This is a methodology and governance finding, not a failed project.
+
+## 5. Branch A — FortiGate Real-Log Analysis
+
+The frozen Branch A workflow uses Isolation Forest for relative anomaly scoring
+and a MiniBatchKMeans distance scorer where applicable. It supports
+prioritization, explainability, and case-study review. The historical score
+distribution is preserved at
+[`02_fortigate_score_distribution.png`](results/stage_2_5/figures/02_fortigate_score_distribution.png).
+
+**ANOMALY != ATTACK** and **ANOMALY SCORE != ATTACK PROBABILITY**. No FortiGate
+supervised accuracy, precision, recall, F1, or production-performance claim is
+made.
+
+## 6. Branch B — UNSW-NB15 Benchmark
 
-Stage 1.7 supplies the frozen, audited feature artifact. Raw identifiers, timestamps, finding values, threat fields, and source-product decisions are excluded from the feature input.
+U1 is Isolation Forest. U2 is the MiniBatchKMeans distance scorer. BASE-S1 is
+Logistic Regression with C=1.0; BASE-S2 is the frozen Stage 2.3 Random Forest
+S2_CONFIG. CHAIN-S1 and CHAIN-S2 use 28 BASE features plus continuous U1 and U2
+signals, for 30 source features. CHAIN-S1 uses Logistic Regression C=1.0;
+CHAIN-S2 uses the frozen Random Forest S2_CONFIG. Chained training signals were
+OOF / CROSS-FITTED with same-row overlap `0`
+and same-group overlap `0`.
 
-## Leakage Controls
+## 7. Metric Terminology
 
-Reference and holdout partitions remain frozen. Stage 1.4 rule and source observations are explanation context only and never model features or attack labels.
+Stage 2.2 is reported using the registry label **Stage 2.2 PR_AUC_AP**,
+with implementation `sklearn.metrics.average_precision_score`;
+the source terminology is not silently renamed. Stage 2.3/2.4 supervised
+primary evaluation uses Average Precision from
+`sklearn.metrics.average_precision_score`, with
+ATTACK = 1 and continuous score `p_attack`.
+
+## 8. Final Results
 
-## Model
-
-Stage 1.8 uses the frozen Isolation Forest configuration recorded in the audited model metadata. This package does not retrain, rescore, or rerank the model output.
-
-## Anomaly Scoring
-
-Anomaly scores are relative abnormality scores on a 0–100 display scale, not attack probabilities. The frozen Stage 1.8 rank is deterministic and remains the authoritative anomaly order.
-
-## Explanation Method
-
-Stage 1.9 supplies evidence-based driver reasons and reference context. Reasons describe observed relationships to the audited reference population; they do not establish maliciousness or incident truth.
-
-## Suspected Behavior and Attack Boundaries
-
-Suspected behavior and attack-type fields are cautious investigation aids. They are not confirmed malicious behavior, confirmed attacks, or labels for supervised attack classification.
-
-## Automated Triage and Optional Human Evaluation Methodology
-
-Auto-triage prioritizes investigation only. The blinded-review queue is optional; no human labels were provided. PENDING rows are valid queue state, and absent human ground truth makes supervised attack-classification metrics unavailable.
-
-## Results/Metrics/Graphs
-
-All reported counts, percentages, tables, and chart aggregates are computed from the validated Stage 1.9 V3 inputs and reconciled final rows.
-
-## Results Tables
-
-Machine-readable exports: [final JSONL](../data/processed/stage_2_0_v5/final_anomaly_findings.jsonl), [final CSV](../data/processed/stage_2_0_v5/final_anomaly_findings.csv), [summary](../data/processed/stage_2_0_v5/analysis_summary.json), and [all tables](../data/processed/stage_2_0_v5/tables/).
-
-### Auto-Triage Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| HIGH_INTEREST | 50 | 0.050% |
-| MEDIUM_INTEREST | 5,183 | 5.183% |
-| LOW_INTEREST | 94,767 | 94.767% |
-
-### Anomaly-Band Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| TOP_0_1_PERCENT | 94 | 0.094% |
-| TOP_1_PERCENT | 880 | 0.880% |
-| TOP_5_PERCENT | 4,259 | 4.259% |
-| BASELINE | 94,767 | 94.767% |
-
-### Evidence-Strength Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| HIGH | 0 | 0.000% |
-| MEDIUM | 0 | 0.000% |
-| LOW | 32 | 0.032% |
-| No value | 99,968 | 99.968% |
-
-### Suspected-Behavior Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| UNUSUAL_TRAFFIC_VOLUME | 2,480 | 2.480% |
-| UNUSUAL_TRAFFIC_DIRECTION | 1,484 | 1.484% |
-| UNUSUAL_SESSION_CHARACTERISTICS | 3,610 | 3.610% |
-| RARE_PORT_OR_SERVICE_CONTEXT | 11,533 | 11.533% |
-| UNUSUAL_PROTOCOL_CONTEXT | 0 | 0.000% |
-| UNCLASSIFIED_ANOMALOUS_PATTERN | 18 | 0.018% |
-
-### Suspected-Attack Interpretation Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| Possible reconnaissance activity | 0 | 0.000% |
-| Unclassified suspicious behavior | 50 | 0.050% |
-| No value | 99,950 | 99.950% |
-
-### Review-Status Distribution
-
-| Category | Count | Share of all records |
-|---|---:|---:|
-| NOT_SELECTED | 99,900 | 99.900% |
-| PENDING | 100 | 0.100% |
-| REVIEWED_RESOLVED | 0 | 0.000% |
-| REVIEWED_UNCERTAIN | 0 | 0.000% |
-
-## Visualizations
-
-The zero-count reconnaissance category is retained intentionally. Chart percentages use the stated record-group denominator; driver tags can overlap and therefore do not sum to 100%.
-
-### 01_score_distribution.png
-
-![01_score_distribution.png](../data/processed/stage_2_0_v5/graphs/01_score_distribution.png)
-
-Score distribution by partition; scores are relative abnormality, not probabilities.
-
-### 02_top20_scores.png
-
-![02_top20_scores.png](../data/processed/stage_2_0_v5/graphs/02_top20_scores.png)
-
-Top-20 rank inspection; raw abnormality is annotated where rounded scores tie.
-
-### 03_anomaly_bands.png
-
-![03_anomaly_bands.png](../data/processed/stage_2_0_v5/graphs/03_anomaly_bands.png)
-
-Frozen Stage 1.8 anomaly-band distribution.
-
-### 04_protocol_representation.png
-
-![04_protocol_representation.png](../data/processed/stage_2_0_v5/graphs/04_protocol_representation.png)
-
-Source-assigned protocol shares for rank ≤ 1,000 versus remaining records.
-
-### 05_service_representation.png
-
-![05_service_representation.png](../data/processed/stage_2_0_v5/graphs/05_service_representation.png)
-
-Source-assigned service shares for rank ≤ 1,000 versus remaining records.
-
-### 06_observed_anomaly_driver_frequency.png
-
-![06_observed_anomaly_driver_frequency.png](../data/processed/stage_2_0_v5/graphs/06_observed_anomaly_driver_frequency.png)
-
-Complete suspected-behavior record shares for Top-50 and Top-1,000 records.
-
-### 07_auto_triage_distribution.png
-
-![07_auto_triage_distribution.png](../data/processed/stage_2_0_v5/graphs/07_auto_triage_distribution.png)
-
-Automated investigation-priority distribution, not attack classification.
-
-### 08_evidence_strength.png
-
-![08_evidence_strength.png](../data/processed/stage_2_0_v5/graphs/08_evidence_strength.png)
-
-Evidence-strength distribution, not attack probability.
-
-### 09_suspected_attack_interpretation.png
-
-![09_suspected_attack_interpretation.png](../data/processed/stage_2_0_v5/graphs/09_suspected_attack_interpretation.png)
-
-Cautious source-supported interpretation distribution; not confirmed attacks.
-
-### 10_feature_comparison.png
-
-![10_feature_comparison.png](../data/processed/stage_2_0_v5/graphs/10_feature_comparison.png)
-
-Stage 1.7 feature empirical CDFs for rank ≤ 100 versus remaining records; missing operands excluded.
-
-## Top-50 Investigation Results
-
-The [ranked Top-50 table](../data/processed/stage_2_0_v5/tables/top_50_anomalies.csv) contains exactly 50 unique source records, all HIGH_INTEREST. Its rank, source identity, score, evidence, and explanation context are preserved for investigation; this selection does not establish confirmed attacks.
-
-## Four Case Studies
-
-### Case 1 — TOP50_WITH_RULE_OBSERVATION
-
-Requested category: `TOP50_WITH_RULE_OBSERVATION`. Fallback: `none`.
-
-- Source: `5551` / `LOG_98b81214139c`; anomaly rank `5`, investigation rank `1`
-- Scores: anomaly `99.994997`, investigation priority `99.995497`; band `TOP_0_1_PERCENT`, triage `HIGH_INTEREST`
-- Behaviors: `UNCLASSIFIED_ANOMALOUS_PATTERN`; suspected attack interpretation: `Unclassified suspicious behavior`; evidence strength: `none`
-- Rule/source observations: rule IDs `fortigate.anomaly_subtype_observation, fortigate.source_threat_observation`; source threat type `Reconnaissance`
-- Review: `PENDING`; analyst and contextual labels remain `None` / `None`
-- Evidence: duration: absent in this record; reference absence frequency 616/79947; descriptive extremeness 0.992295; protocol_icmp: observed 1.0; reference frequency 22066/79947; descriptive extremeness 0.723992
-- Interpretation limit: this is an investigation example, not a confirmed incident or attack.
-
-### Case 2 — TOP50_WITHOUT_RULE_OBSERVATION
-
-Requested category: `TOP50_WITHOUT_RULE_OBSERVATION`. Fallback: `none`.
-
-- Source: `6651` / `LOG_2cb8e00c2e4f`; anomaly rank `1`, investigation rank `23`
-- Scores: anomaly `100.0`, investigation priority `90.0`; band `TOP_0_1_PERCENT`, triage `HIGH_INTEREST`
-- Behaviors: `RARE_PORT_OR_SERVICE_CONTEXT`; suspected attack interpretation: `Unclassified suspicious behavior`; evidence strength: `LOW`
-- Rule/source observations: rule IDs `none`; source threat type `none`
-- Review: `PENDING`; analyst and contextual labels remain `None` / `None`
-- Evidence: service_rarity: observed in 4/79947 reference records of this protocol; descriptive extremeness 0.998974; duration: absent in this record; reference absence frequency 616/79947; descriptive extremeness 0.992295; protocol_icmp: observed 1.0; reference frequency 22066/79947; descriptive extremeness 0.723992
-- Interpretation limit: this is an investigation example, not a confirmed incident or attack.
-
-### Case 3 — REFERENCE_OBSERVATION_OUTSIDE_TOP50
-
-Requested category: `REFERENCE_OBSERVATION_OUTSIDE_TOP50`. Fallback: `none`.
-
-- Source: `151` / `LOG_0648ef75cfa3`; anomaly rank `290`, investigation rank `19`
-- Scores: anomaly `99.696049`, investigation priority `99.726444`; band `TOP_1_PERCENT`, triage `MEDIUM_INTEREST`
-- Behaviors: `UNUSUAL_TRAFFIC_VOLUME, UNUSUAL_SESSION_CHARACTERISTICS, RARE_PORT_OR_SERVICE_CONTEXT`; suspected attack interpretation: `none`; evidence strength: `none`
-- Rule/source observations: rule IDs `fortigate.source_threat_observation`; source threat type `Reconnaissance`
-- Review: `NOT_SELECTED`; analyst and contextual labels remain `None` / `None`
-- Evidence: log_duration: observed 10.299407247800762; higher relative to 79331 eligible reference records; descriptive extremeness 0.997365; service_rarity: observed in 79/79947 reference records of this protocol; descriptive extremeness 0.996335; log_sent_packets: observed 12.945514020774835; higher relative to 79331 eligible reference records; descriptive extremeness 0.964793
-- Interpretation limit: this is an investigation example, not a confirmed incident or attack.
-
-### Case 4 — MEDIUM_INTEREST_SPECIFIC_BEHAVIOR
-
-Requested category: `MEDIUM_INTEREST_SPECIFIC_BEHAVIOR`. Fallback: `none`.
-
-- Source: `40361` / `LOG_25d8b6388df5`; anomaly rank `51`, investigation rank `55`
-- Scores: anomaly `99.959973`, investigation priority `89.963976`; band `TOP_0_1_PERCENT`, triage `MEDIUM_INTEREST`
-- Behaviors: `RARE_PORT_OR_SERVICE_CONTEXT`; suspected attack interpretation: `none`; evidence strength: `none`
-- Rule/source observations: rule IDs `none`; source threat type `none`
-- Review: `NOT_SELECTED`; analyst and contextual labels remain `None` / `None`
-- Evidence: dst_port_rarity: observed in 0/57881 reference records of this protocol; descriptive extremeness 1.000000; protocol_udp: observed 1.0; reference frequency 4893/79947; descriptive extremeness 0.938797; log_sent_bytes: observed 0.0; lower relative to 79331 eligible reference records; descriptive extremeness 0.532100
-- Interpretation limit: this is an investigation example, not a confirmed incident or attack.
-
-## Optional Human Evaluation
-
-Human review is optional. No human labels were supplied, so supervised attack-classification metrics, reference agreement, precision, recall, F1, ROC-AUC, PR-AUC, and confusion matrices are unavailable and are not inferred.
-
-## Reproducibility
-
-The validated release package is `data/processed/stage_2_0_v5`; preserve it.
-The package accepts validated Stage 1.9 V3 artifacts only; superseded V2
-artifacts are not inputs. Run each command from the repository root only after
-its predecessor exits with code 0. These commands build a distinct fresh
-reproduction package rather than overwriting the validated V5 package.
-
-```powershell
-& .\.venv\Scripts\python.exe -m pip check
-& .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
-& .\.venv\Scripts\python.exe -m pytest tests -q
-$AuditedStage19Explanations = '.\data\processed\stage_1_9_corrected_v3'
-$AuditedStage19AutoTriage = '.\data\processed\stage_1_9_auto_triage_corrected_v3'
-$Stage20Output = '.\data\processed\stage_2_0_reproduction'
-
-if (Test-Path -LiteralPath $Stage20Output) {
-    throw "Fresh Stage 2.0 reproduction output path already exists"
-}
-
-& .\.venv\Scripts\python.exe .\src\build_final_package.py --features-dir .\data\processed\stage_1_7 --scores-dir .\data\processed\stage_1_8 --explanations-dir $AuditedStage19Explanations --auto-triage-dir $AuditedStage19AutoTriage --output-dir $Stage20Output
-.\scripts\validate_stage_2_0.ps1 -PackageDir $Stage20Output
-.\scripts\validate_stage_1_6.ps1 -Database .\data\processed\stage_1_5f_detection_store.sqlite3 -FindingsInput .\data\processed\stage_1_4f_detection_findings.jsonl -SummaryInput .\data\processed\stage_1_4f_detection_summary.json -ExpectedRunId 5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc -Port 8000
-```
-
-## Local Demo
-
-Open this report and the ranked CSV, then trace a case through its preserved source identity and explanation context. The existing read-only API serves Stage 1.4 rule observations only; it does not serve AI outputs.
-
-```powershell
-& .\.venv\Scripts\python.exe .\src\serve_api.py --database .\data\processed\stage_1_5f_detection_store.sqlite3 --findings .\data\processed\stage_1_4f_detection_findings.jsonl --summary .\data\processed\stage_1_4f_detection_summary.json --expected-run-id 5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc --port 8000
-```
-
-In a second local terminal:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/healthz
-Invoke-RestMethod "http://127.0.0.1:8000/api/v1/runs/5212f083bb3832158bcd650535536c22d1b8dbf582496726f998ece949ee20dc/findings?limit=5"
-```
-
-Repository-supported Stage 1.6F evidence records a corrected loopback validation PASS for this exact store and approved Stage 1.4 artifacts: 43 findings across 25 source records, 227 evidence entries, and two rules. Rerun the command above for fresh local confirmation; it remains a read-only rule-observation API, not an AI-results API.
-
-## Limitations
-
-Timestamps and duration units are not reinterpreted. Sanitized network identifiers are opaque. No raw label data, confirmed attacks, or supervised evaluation is present.
-
-## Future Work
-
-Future work requires a separately approved, audited human-review workflow rather than automatically treating anomalies as attacks.
+The machine-readable outputs are the seven approved tables:
+
+1. [`01_dataset_roles.csv`](results/stage_2_5/tables/01_dataset_roles.csv)
+2. [`02_models.csv`](results/stage_2_5/tables/02_models.csv)
+3. [`03_unsupervised_results.csv`](results/stage_2_5/tables/03_unsupervised_results.csv)
+4. [`04_base_supervised_results.csv`](results/stage_2_5/tables/04_base_supervised_results.csv)
+5. [`05_chain_development.csv`](results/stage_2_5/tables/05_chain_development.csv)
+6. [`06_chain_locked_test.csv`](results/stage_2_5/tables/06_chain_locked_test.csv)
+7. [`07_leakage_governance.csv`](results/stage_2_5/tables/07_leakage_governance.csv)
+
+They preserve separate FortiGate descriptive anomaly aggregates, UNSW
+unsupervised metrics, supervised baselines, chain comparisons, locked TEST
+secondary metrics, sensitivity-only rows, and governance evidence.
+
+## 9. Chained ML Analysis
+
+| Pair | BASE AP | CHAIN AP | Delta | Frozen result |
+|---|---:|---:|---:|---|
+| S1 development | 0.9939231496371828 | 0.9941359114288555 | 0.00021276179167273312 | IMPROVEMENT |
+| S2 development | 0.9968637967521546 | 0.9968208117560664 | -4.298499608823558e-05 | DEGRADATION |
+
+Adding anomaly scores produced a small positive AP change for S1 and did not
+improve S2. Additional features are therefore not automatically beneficial to
+every supervised model. See
+[`03_paired_ap_deltas.png`](results/stage_2_5/figures/03_paired_ap_deltas.png).
+
+## 10. Locked TEST Reporting
+
+Stage 2.4E is a **LOCKED FIXED-DESIGN FINAL CHAINED EVALUATION** over
+`82332` rows. The frozen
+descriptive AP results are:
+
+| Pair | BASE AP | CHAIN AP | Delta |
+|---|---:|---:|---:|
+| S1 | 0.9650555012702602 | 0.9659663520592334 | 0.0009108507889732387 |
+| S2 | 0.9848644789351858 | 0.9845491751973731 | -0.00031530373781274434 |
+
+These TEST deltas are descriptive reporting only. They do not establish a new
+winner or alter the frozen selection. The six reconciled matrices are shown in
+[`04_confusion_matrices.png`](results/stage_2_5/figures/04_confusion_matrices.png).
+
+## 11. Test Limitation
+
+The official UNSW-NB15 TEST split was used in earlier fixed-stage evaluations.
+Therefore Stage 2.4E was a **LOCKED FIXED-DESIGN FINAL CHAINED EVALUATION**, but
+the TEST split was **NOT NEWLY UNSEEN AT THE OVERALL PROJECT LEVEL**.
+
+## 12. Governance and Leakage Controls
+
+- Training anomaly signals: **OOF / CROSS-FITTED**.
+- Same-row fit/signal overlap: **0**.
+- Same-group fit/signal overlap: **0**.
+- Planned fit IDs: **28**; fresh executed: **20**;
+  validated reused: **0**; not required by deduplication:
+  **8**; unresolved: **0**.
+- Accounted: **28/28**; signal coverage: **140273/140273**;
+  fallback/imputed signals: **0**.
+- Selection lock: **VERIFIED**; human TEST authorization: **VERIFIED**.
+- TEST contribution to fitted state: **NONE**; post-TEST tuning: **NONE**.
+
+## 13. Limitations
+
+- FortiGate has no defensible primary supervised ground truth in this project.
+- UNSW is a benchmark and does not establish FortiGate production performance.
+- Small chain AP changes carry **NO STATISTICAL SIGNIFICANCE CLAIM**.
+- The official TEST split is not newly unseen at the overall project level.
+- FortiGate anomaly findings require analyst and contextual interpretation.
+- Benchmark performance does not imply detection of every attack.
+- The project is not claimed production-ready.
+
+## 14. Claim Boundaries
+
+The approved claims contract is [`claims_matrix.json`](results/stage_2_5/claims_matrix.json).
+The following boundaries remain explicit:
+
+`ANOMALY != ATTACK` · `ANOMALY SCORE != ATTACK PROBABILITY` ·
+`RULE MATCH != CONFIRMED ATTACK` · `HIGH_INTEREST != CONFIRMED ATTACK` ·
+`LOW_INTEREST != CONFIRMED BENIGN` · `SOURCE THREAT OBSERVATION != GROUND TRUTH` ·
+`ABSENCE OF ALERT != BENIGN` · `NO STATISTICAL SIGNIFICANCE CLAIM`.
+
+## 15. Reproducibility
+
+The frozen registry, source inventory, tables, figures, and validation commands
+are documented in [`docs/reproducibility_runbook.md`](reproducibility_runbook.md).
+Stage 2.5 reporting adapts frozen artifacts; it does not retrain, regenerate
+predictions, or rerun official TEST.
+
+## 16. Conclusion
+
+The project preserves a real-log anomaly workflow without fabricated ground
+truth, while the separate UNSW benchmark branch enables quantitative supervised
+evaluation. Leakage-safe chained signals were implemented successfully. S1
+received a small frozen development AP increase; S2 did not improve. These
+conclusions remain dataset-scoped, descriptive, and unsuitable for claims of
+universal or production superiority.
+
+## Historical Stage 2.0 Context
+
+The earlier FortiGate Stage 2.0 package remains historical context and is
+preserved under `data/processed/stage_2_0_v5/`. Its anomaly, explanation, and
+prioritization outputs are not relabeled as attacks by this report.

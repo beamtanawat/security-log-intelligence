@@ -1,196 +1,96 @@
 # Security Log Intelligence
 
-A learning-focused and portfolio-focused cybersecurity project
-for analyzing security logs and gradually developing an
-AI-assisted security intelligence platform.
+Security Log Intelligence is a reproducible cybersecurity log-analysis project
+with two deliberately separate evaluation branches.
 
-The project starts with sanitized FortiGate network/security logs
-and is designed to support additional security log sources in the future.
+## Architecture
 
-## Project Goal
+- **Branch A — FortiGate:** real sanitized logs for unsupervised anomaly
+  scoring, prioritization, explainability, and case studies.
+- **Branch B — UNSW-NB15:** labeled benchmark for U1/U2, BASE S1/S2, and
+  CHAIN-S1/S2 quantitative evaluation.
 
-The goal is to build the project incrementally while learning and applying:
+**DATASETS MERGED: NO.** UNSW metrics do NOT establish FortiGate production
+performance. See the [final architecture](docs/results/stage_2_5/figures/01_two_branch_architecture.mmd).
 
-- Cybersecurity
-- Security Log Analysis
-- Data Engineering
-- Software Engineering
-- Machine Learning
-- AI Engineering
+## Key Capabilities
 
-The project will begin with understanding and validating security data
-before introducing detection rules, machine learning, LLMs, or deployment.
+- real-log anomaly scoring and prioritization
+- labeled benchmark supervised evaluation
+- leakage-safe OOF / cross-fitted chained ML
+- frozen-artifact provenance and governance
+- reproducible tables, figures, and validation
 
-## Current Stage
+## Project Stages
 
-### Stage 2.0 — Final Results Package (V5 validation passed)
+- **Stage 1:** FortiGate ingestion, normalization, detection, storage, and
+  anomaly/explainability foundations.
+- **Historical Stage 1.3 — Evidence-Preserving FortiGate Normalization —
+  Complete:** the read-only normalization contract and audit remain documented
+  in the [schema](docs/normalized_event_schema.md),
+  [mapping](docs/fortigate_normalization_mapping.md), and
+  [findings](docs/stage_1_3_normalization_findings.md).
+- **Stage 2.1:** FortiGate labeling-feasibility finding; UNSW adopted as the
+  separate labeled benchmark.
+- **Stage 2.2:** UNSW unsupervised U1/U2 comparison and FortiGate anomaly review.
+- **Stage 2.3:** UNSW BASE S1/S2 supervised classification.
+- **Stage 2.4:** leakage-safe CHAIN-S1/S2 development and locked fixed-design
+  evaluation.
+- **Stage 2.5A–C:** registry, seven tables, four figures, and this documentation.
 
-The project has progressed through the exploration, normalization, rule,
-storage, API, feature, anomaly-scoring, and explainability foundations. The
-current local work is the final Stage 2.0 package described below. The original
-Stage 1 exploration priorities were:
+## Headline Results
 
-1. Load the dataset safely
-2. Inspect the schema
-3. Understand important fields
-4. Profile missing values
-5. Inspect event types and actions
-6. Inspect protocols, applications, and services
-7. Inspect network session information
-8. Inspect threat-related fields
-9. Identify data quality issues
-10. Document findings
+Frozen UNSW development comparisons use Average Precision:
 
-Stage 1.8 includes an Isolation Forest anomaly-detection baseline. Its
-scores rank relative abnormality for investigation; they are not attack
-probabilities or attack classifications.
+- CHAIN-S1: `0.00021276179167273312` AP delta (`IMPROVEMENT`).
+- CHAIN-S2: `-4.298499608823558e-05` AP delta (`DEGRADATION`).
 
-### Stage 1.3 — Evidence-Preserving FortiGate Normalization — Complete
+Locked TEST deltas are descriptive only: S1 `0.0009108507889732387` and
+S2 `-0.00031530373781274434` (CHAIN-S2 AP `0.9845491751973731`).
+**NOT NEWLY UNSEEN AT THE OVERALL PROJECT LEVEL.** **NO STATISTICAL SIGNIFICANCE CLAIM.**
+UNSW metrics do NOT establish FortiGate production performance.
 
-Stage 1.3 establishes a streaming, read-only FortiGate normalization path:
-an explicit event-schema contract, a 58-field mapping specification, a source
-adapter, record-level normalization, deterministic JSON Lines output, and an
-all-record output audit. The final reconciliation passed against the sanitized
-100,000-record export while preserving documented unknowns and source evidence.
+## Repository Structure
 
-This completion makes the normalized output available for a separately planned
-rule-based detection stage. It does not implement or authorize detection,
-classification, scoring, machine learning, APIs, or deployment. See
-[`docs/normalized_event_schema.md`](docs/normalized_event_schema.md),
-[`docs/fortigate_normalization_mapping.md`](docs/fortigate_normalization_mapping.md),
-and [`docs/stage_1_3_normalization_findings.md`](docs/stage_1_3_normalization_findings.md).
+`src/` contains pipeline and reporting code; `tests/` contains focused tests;
+`docs/plans/` contains approved plans; `docs/results/stage_2_5/` contains the
+registry, provenance, tables, and figures; `data/` contains local raw and
+processed evidence according to the data policy.
 
-### Stage 1.4 — Rule-Based Detection Foundation — Complete
+## Quick Start / Validation
 
-Stage 1.4 adds a small, deterministic detection path on top of normalized events:
-an immutable rule contract and registry, record-level streaming evaluation,
-provenance-preserving findings, safe JSON Lines publication, and a streaming output
-audit. The two initial FortiGate-only rules surface source-product threat observations
-and the exact source subtype `anomaly`; they do not confirm attacks or create
-incidents.
+See the [reproducibility runbook](docs/reproducibility_runbook.md). The frozen
+package validators are:
 
-The validated audit evaluated all 100,000 normalized records, produced 43
-informational findings from 25 source records, and verified deterministic output,
-evidence, provenance, input integrity, and Git safety. These findings are
-observations for review, not attack counts, maliciousness labels, confidence scores,
-or risk scores. See [`docs/detection_contract.md`](docs/detection_contract.md),
-[`docs/initial_detection_rules.md`](docs/initial_detection_rules.md), and
-[`docs/stage_1_4_detection_findings.md`](docs/stage_1_4_detection_findings.md).
+```sh
+PYTHONPATH=src .venv/bin/python -m src.build_stage_2_5_package --output-dir docs/results/stage_2_5 --validate-only
+PYTHONPATH=src .venv/bin/python -m src.build_stage_2_5_tables_figures --output-dir docs/results/stage_2_5 --validate-only
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_stage_2_5_package.py tests/test_stage_2_5_claims.py tests/test_stage_2_5_tables_figures.py tests/test_stage_2_5_docs.py -q
+```
 
-Stage 1.4 does not add thresholds, time windows, correlation, incidents, machine
-learning, storage, APIs, or a dashboard. Any next stage remains separately planned.
+## Data Policy
 
-### Stage 1.5 — Detection Finding Storage and Read-Only Query Foundation — Complete
+Raw FortiGate and UNSW files are immutable local evidence and are not committed.
+Generated row-level predictions, model bundles, caches, and local metadata may
+remain ignored. Public aggregate registry/table/figure artifacts carry hashes
+and provenance; no secrets or credentials are required.
 
-Stage 1.5 adds a local SQLite v1 projection for the approved Stage 1.4 finding
-artifacts. It strictly validates the finding JSONL and bounded summary, creates one
-new database transactionally without overwriting an existing database, provides
-typed bounded read-only queries, and independently audits schema integrity,
-provenance projections, exact finding reconstruction, and logical determinism.
+## Limitations
 
-The validated storage run reconciled the approved 43 `INFORMATIONAL` findings from
-25 source records and two rules. These remain deterministic source-observation
-findings—not confirmed attacks, malicious activity, compromises, or incidents.
-Storage validation does not reopen the raw CSV or normalized JSONL, and generated
-SQLite artifacts remain ignored and untracked. See
-[`docs/detection_storage_contract.md`](docs/detection_storage_contract.md) and
-[`docs/stage_1_5_storage_findings.md`](docs/stage_1_5_storage_findings.md).
+`ANOMALY != ATTACK`; `ANOMALY SCORE != ATTACK PROBABILITY`;
+`RULE MATCH != CONFIRMED ATTACK`; `HIGH_INTEREST != CONFIRMED ATTACK`;
+`LOW_INTEREST != CONFIRMED BENIGN`; `SOURCE THREAT OBSERVATION != GROUND TRUTH`;
+`ABSENCE OF ALERT != BENIGN`. FortiGate has no defensible primary supervised
+ground truth here. Benchmark results do not imply every attack is detected or
+production readiness. The official TEST split was used in earlier fixed-stage
+evaluations and is not newly unseen at the overall project level.
+**NO STATISTICAL SIGNIFICANCE CLAIM.**
 
-Stage 1.5 does not implement an API, dashboard, authentication, mutable database
-workflow, new detection rule, correlation, incident process, ML, LLM, or deployment.
-A read-only API remains a separately planned next stage.
+## Documentation
 
-### Stage 2.0 — Final Results Package — V5 Validated
+- [Final technical report](docs/final_project_report.md)
+- [Reproducibility runbook](docs/reproducibility_runbook.md)
+- [Stage 2.5 results package](docs/results/stage_2_5/)
+- [Claims contract](docs/results/stage_2_5/claims_matrix.json)
 
-The final package presents measured Stage 1.9 V3 anomaly, explainability, and
-investigation-priority results as ranked JSONL/CSV exports, reconciled tables,
-ten charts, case studies, and a reproducible technical report. It preserves
-the boundaries `ANOMALY != ATTACK` and `ANOMALY SCORE != ATTACK PROBABILITY`.
-See [`docs/final_project_report.md`](docs/final_project_report.md) and the
-approved [`Stage 2.0 plan`](docs/plans/stage_2_0_final_project_package_plan.md).
-
-The validated Stage 2.0 V5 package stays local and ignored under
-`data/processed/stage_2_0_v5/`. Stage 2.0 V5 validation passed: 286 tests
-passed, 130 subtests passed, and two known upstream deprecation warnings were
-reported. Its measured package summary is `record_count = 100000`,
-`top_50_count = 50`, and `graph_count = 10`. To
-reproduce the package, use the fresh-output builder and validator commands in
-the final report with the validated Stage 1.9 V3 input directories; do not
-substitute superseded V2 artifacts or overwrite the validated V5 package.
-
-## Current Dataset
-
-The initial dataset is:
-
-`network_log_SAFE.csv`
-
-It contains sanitized FortiGate network/security traffic data.
-
-Important field groups include:
-
-- Event metadata
-- Source and destination information
-- Network protocols
-- Ports
-- Network sessions
-- Applications and services
-- Host information
-- Event severity
-- Threat information
-
-The project treats raw security logs as immutable evidence.
-
-## Future Log Sources
-
-The architecture is intended to support additional security log sources such as:
-
-- Windows Event Logs
-- Linux authentication logs
-- DNS logs
-- Firewall logs
-- IDS / IPS logs
-- Endpoint logs
-- VPN logs
-- Proxy logs
-- Cloud security logs
-- EDR logs
-- NetFlow
-- SIEM exports
-
-Different sources will eventually use source-specific parsers
-that map data into a common internal security event format.
-
-## Planned Evolution
-
-```text
-Security Logs
-      ↓
-Data Exploration
-      ↓
-Validation
-      ↓
-Parsing
-      ↓
-Normalization
-      ↓
-Rule-Based Detection
-      ↓
-Database / Data Engineering
-      ↓
-Backend API
-      ↓
-Web Dashboard
-      ↓
-Machine Learning
-      ↓
-Explainable AI
-      ↓
-Behavior Analytics
-      ↓
-Event Correlation
-      ↓
-Incident Intelligence
-      ↓
-LLM-Assisted Analysis
-      ↓
-Deployment
+Registry SHA-256: `c7a29a52b6ef9d3a95dc8c53f2f44c19ee7e91583a4d7231b7f7135b75dedb10`

@@ -1,0 +1,21 @@
+flowchart TD
+    I[INPUT PROJECT] --> A
+    I --> B
+    subgraph A[BRANCH A — FortiGate real sanitized logs]
+      A1[REAL-LOG UNSUPERVISED / ANOMALY ANALYSIS]
+      A2[anomaly scoring / prioritization / explainability]
+      A3[real-log case study]
+      A1 --> A2 --> A3
+    end
+    subgraph B[BRANCH B — UNSW-NB15 benchmark]
+      B1[LABELED BENCHMARK QUANTITATIVE EVALUATION]
+      B2[U1 / U2 benchmark]
+      B3[BASE S1 / S2]
+      B4[CHAIN-S1 / CHAIN-S2]
+      B1 --> B2
+      B1 --> B3
+      B1 --> B4
+    end
+    N[DATASETS MERGED: NO]
+    A -.-> N
+    B -.-> N

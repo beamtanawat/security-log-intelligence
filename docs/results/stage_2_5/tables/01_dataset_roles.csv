@@ -1,0 +1,3 @@
+branch,dataset,role,uses,supervised_fortigate_performance_claim,datasets_merged,limitation
+BRANCH_A,FortiGate real sanitized logs,REAL-LOG UNSUPERVISED / ANOMALY ANALYSIS,"[""anomaly scoring"",""prioritization"",""explainability"",""real-log case study""]",NO,NO,Anomaly analysis only; ANOMALY != ATTACK.
+BRANCH_B,UNSW-NB15,LABELED BENCHMARK FOR SUPERVISED AND CHAINED QUANTITATIVE EVALUATION,"[""U1/U2 benchmark evaluation"",""BASE S1/S2 evaluation"",""CHAIN-S1/S2 evaluation""]",NOT APPLICABLE,NO,UNSW metrics do NOT establish FortiGate production performance.

@@ -1,0 +1,161 @@
+{
+  "fortigate_figure_context": {
+    "score_identity": "historical Stage 2.0 relative anomaly score distribution; not an attack probability",
+    "u1_model": {
+      "branch": "BRANCH_A",
+      "family": "ISOLATION_FOREST",
+      "fit_split": "REFERENCE",
+      "role": "real-log anomaly scoring",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    },
+    "u2_model": {
+      "branch": "BRANCH_A",
+      "config": {
+        "batch_size": 1024,
+        "compute_labels": false,
+        "init": "k-means++",
+        "init_size": 3072,
+        "max_iter": 100,
+        "max_no_improvement": 10,
+        "n_clusters": 32,
+        "n_init": 3,
+        "random_state": 1729,
+        "reassignment_ratio": 0.01,
+        "score_batch_size": 4096,
+        "tol": 0.0
+      },
+      "family": "MINIBATCHKMEANS_DISTANCE_SCORER",
+      "fit_split": "REFERENCE",
+      "role": "real-log anomaly scoring",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    }
+  },
+  "generation_code": {
+    "path": "src/reporting/tables_figures.py",
+    "sha256": "bf0b91bc803ee9cf998e403b4f1db48bea9841d1b8c1e313bb10f18a889545e9"
+  },
+  "outputs": {
+    "figures": {
+      "01_two_branch_architecture.mmd": {
+        "path": "figures/01_two_branch_architecture.mmd",
+        "sha256": "85b17d43ad1974ff2e5f8dc2f982fd8a5a6a55ed129533e881e9a2d433e2d437",
+        "source_sections": [
+          "branches",
+          "models",
+          "datasets_merged"
+        ]
+      },
+      "02_fortigate_score_distribution.png": {
+        "path": "figures/02_fortigate_score_distribution.png",
+        "sha256": "2d7e721ac8762ed0e1b4be1be36d518c55c610ba407ffce22c60142c87ac41dd",
+        "source_sections": [
+          "historical FortiGate figure source"
+        ]
+      },
+      "03_paired_ap_deltas.png": {
+        "path": "figures/03_paired_ap_deltas.png",
+        "sha256": "faa150c9935ed62fec8829660f4322749c5d80fc2a8d29eb145d81ba5d7bfa43",
+        "source_sections": [
+          "comparisons.development",
+          "comparisons.locked_test"
+        ]
+      },
+      "04_confusion_matrices.png": {
+        "path": "figures/04_confusion_matrices.png",
+        "sha256": "ef86bb556ad7f9f09571212e569e4af1ec3b2512e94495efd878562599a4cb25",
+        "source_sections": [
+          "confusion_matrices"
+        ]
+      }
+    },
+    "tables": {
+      "01_dataset_roles.csv": {
+        "path": "tables/01_dataset_roles.csv",
+        "sha256": "7b9646391ff60589294142457376d00c35c1a9d73dc558cb76055d3342cb148a",
+        "source_sections": [
+          "branches",
+          "datasets",
+          "datasets_merged"
+        ]
+      },
+      "02_models.csv": {
+        "path": "tables/02_models.csv",
+        "sha256": "8b4586da9399f75f47cdb7034fd60d017597ba90c3665034463e95615fffb760",
+        "source_sections": [
+          "models"
+        ]
+      },
+      "03_unsupervised_results.csv": {
+        "path": "tables/03_unsupervised_results.csv",
+        "sha256": "e81c5823fd348b3a022ac5e36bc7bfc48c8ec8099dfed05b24226cffaafd26f6",
+        "source_sections": [
+          "metrics.records",
+          "FortiGate comparison artifact"
+        ]
+      },
+      "04_base_supervised_results.csv": {
+        "path": "tables/04_base_supervised_results.csv",
+        "sha256": "a96ed0d5b3b52c022c7eabd83c05def22186633eab46aed4341bd9d6417e8bdf",
+        "source_sections": [
+          "metrics.records",
+          "comparisons.development"
+        ]
+      },
+      "05_chain_development.csv": {
+        "path": "tables/05_chain_development.csv",
+        "sha256": "545ab15e7eb3ad59b62907b0d1ed233e69762f83ad4494152ef7fad13614b371",
+        "source_sections": [
+          "comparisons.development"
+        ]
+      },
+      "06_chain_locked_test.csv": {
+        "path": "tables/06_chain_locked_test.csv",
+        "sha256": "bc66081cfcc2bf0adeff2599052631a97c487cdfc6082f69750445007f8a74a5",
+        "source_sections": [
+          "comparisons.locked_test",
+          "sensitivity analysis artifact"
+        ]
+      },
+      "07_leakage_governance.csv": {
+        "path": "tables/07_leakage_governance.csv",
+        "sha256": "83046aa18e5af06ff52564429ed56db707745f5b023407c1f0541a9a83fc130d",
+        "source_sections": [
+          "leakage",
+          "governance",
+          "claim_limits"
+        ]
+      }
+    }
+  },
+  "registry": {
+    "path": "docs/results/stage_2_5/final_result_registry.json",
+    "sha256": "c7a29a52b6ef9d3a95dc8c53f2f44c19ee7e91583a4d7231b7f7135b75dedb10"
+  },
+  "rendering": {
+    "backend": "Agg",
+    "dpi": 150,
+    "font": "matplotlib default sans-serif",
+    "timestamp_metadata": "excluded"
+  },
+  "schema_version": "stage_2.5B-provenance/1.0",
+  "source_inventory_sha256": "d11d8c611d6ad7fd2f5a3513d72c174a270ddb9712eb00490ef8ab0794c6d052",
+  "sources": {
+    "fortigate_analysis_summary": {
+      "path": "data/processed/stage_2_0_v5/analysis_summary.json",
+      "sha256": "bdfa1cd0f065b1e28c42ec18f8535196bc1420442c81f1058e8f3de68d6213cf"
+    },
+    "fortigate_comparison": {
+      "path": "data/processed/stage_2_2/fortigate/v1/fortigate_u1_u2_comparison.json",
+      "sha256": "708c3d188ed7034f3141c195ed137bb630218bee3a199c48366c49ae29e06d32"
+    },
+    "fortigate_figure": {
+      "path": "data/processed/stage_2_0_v5/graphs/01_score_distribution.png",
+      "sha256": "2d7e721ac8762ed0e1b4be1be36d518c55c610ba407ffce22c60142c87ac41dd"
+    },
+    "sensitivity_analysis": {
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_test_sensitivity_analysis.json",
+      "sha256": "1a235513a879b65d8eecffba388c3202c68ac1405a3be808a2aa64b1302a809c"
+    }
+  },
+  "stage": "2.5B"
+}

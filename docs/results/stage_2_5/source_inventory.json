@@ -1,0 +1,774 @@
+{
+  "entries": [
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "historical",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/processed/stage_2_0_v5/analysis_summary.json",
+      "purpose": "historical FortiGate analysis context",
+      "schema": "json-object",
+      "sha256": "bdfa1cd0f065b1e28c42ec18f8535196bc1420442c81f1058e8f3de68d6213cf"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "historical",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/processed/stage_2_0_v5/tables/case_studies.json",
+      "purpose": "historical FortiGate case-study context",
+      "schema": "json-object",
+      "sha256": "43a311eb173296f807edbbf8a06ff265e5af0d968f643c67e58df07a6acd0751"
+    },
+    {
+      "allowed_json_pointers": [
+        "/reference_descriptive",
+        "/holdout",
+        "/all_rows_descriptive"
+      ],
+      "checkpoint": "2.2C",
+      "json_pointers": [
+        "/reference_descriptive",
+        "/holdout",
+        "/all_rows_descriptive"
+      ],
+      "parent_manifest": "data/processed/stage_2_2/fortigate/v1/manifest.json",
+      "parent_manifest_sha256": "cbfab55f485f2a6c56f27fb0f71ec0932a8c06218b624658a1b90e6f07464e6e",
+      "path": "data/processed/stage_2_2/fortigate/v1/fortigate_u1_u2_comparison.json",
+      "purpose": "FortiGate unsupervised comparison",
+      "schema": "json-object",
+      "sha256": "708c3d188ed7034f3141c195ed137bb630218bee3a199c48366c49ae29e06d32"
+    },
+    {
+      "allowed_json_pointers": [
+        "/",
+        "/u2_config"
+      ],
+      "checkpoint": "2.2C",
+      "json_pointers": [
+        "/",
+        "/u2_config"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/processed/stage_2_2/fortigate/v1/manifest.json",
+      "purpose": "FortiGate unsupervised manifest",
+      "schema": "json-object",
+      "sha256": "cbfab55f485f2a6c56f27fb0f71ec0932a8c06218b624658a1b90e6f07464e6e"
+    },
+    {
+      "allowed_json_pointers": [
+        "/feature_order",
+        "/excluded_fields",
+        "/fit_boundary"
+      ],
+      "checkpoint": "2.2A",
+      "json_pointers": [
+        "/feature_order",
+        "/excluded_fields",
+        "/fit_boundary"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/contracts/unsw_feature_contract.json",
+      "purpose": "UNSW feature contract",
+      "schema": "json-object",
+      "sha256": "bc66e157f74992c66b798f37a933f2894fe65b6df7d4b010e973465a7e6e14f6"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.2A",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "purpose": "UNSW Stage 2.2 manifest",
+      "schema": "json-object",
+      "sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e"
+    },
+    {
+      "allowed_json_pointers": [
+        "/partition_counts",
+        "/group_overlap_check"
+      ],
+      "checkpoint": "2.2A",
+      "json_pointers": [
+        "/partition_counts",
+        "/group_overlap_check"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/reports/unsw_split_audit.json",
+      "purpose": "UNSW split audit",
+      "schema": "json-object",
+      "sha256": "a2ceb27131db023ebd9dfb4236af1ba18c17fba191a91e06704a7130dd645c9d"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.2E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/final_stage_2_2_manifest.json",
+      "purpose": "UNSW U1/U2 TEST manifest",
+      "schema": "json-object",
+      "sha256": "97158a8ca0ed4952ec1087400f067d36d1daa41ea0b5fb733ae217a1dc832888"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics"
+      ],
+      "checkpoint": "2.2E",
+      "json_pointers": [
+        "/metrics"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+      "purpose": "UNSW U1 TEST metrics",
+      "schema": "json-object",
+      "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics"
+      ],
+      "checkpoint": "2.2E",
+      "json_pointers": [
+        "/metrics"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+      "purpose": "UNSW U2 TEST metrics",
+      "schema": "json-object",
+      "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+    },
+    {
+      "allowed_json_pointers": [
+        "/models",
+        "/comparison_decision",
+        "/official_test"
+      ],
+      "checkpoint": "2.2D",
+      "json_pointers": [
+        "/models",
+        "/comparison_decision",
+        "/official_test"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/selection_lock_manifest.json",
+      "purpose": "UNSW U1/U2 selection lock",
+      "schema": "json-object",
+      "sha256": "6a2e5f22e352ebcf156afa3bc3bf655055a02e542aa38a15b86ff5caf9b43889"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.2D",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_u2_comparison.json",
+      "purpose": "UNSW U1/U2 comparison",
+      "schema": "json-object",
+      "sha256": "21ac797717e0dee21c7a1df7f7f73a66963fb31d004d84f40a69b2fbc7bb8fbc"
+    },
+    {
+      "allowed_json_pointers": [
+        "/comparison"
+      ],
+      "checkpoint": "2.2D",
+      "json_pointers": [
+        "/comparison"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+      "purpose": "UNSW U1 development metrics",
+      "schema": "json-object",
+      "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+    },
+    {
+      "allowed_json_pointers": [
+        "/comparison"
+      ],
+      "checkpoint": "2.2D",
+      "json_pointers": [
+        "/comparison"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_2/v1/manifest.json",
+      "parent_manifest_sha256": "ff76fb00da29cdaab4abddadc9fed0547cde394edc864148f7d50089cf5e514e",
+      "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+      "purpose": "UNSW U2 development metrics",
+      "schema": "json-object",
+      "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+    },
+    {
+      "allowed_json_pointers": [
+        "/models",
+        "/selection_lock_sha256"
+      ],
+      "checkpoint": "2.3E",
+      "json_pointers": [
+        "/models",
+        "/selection_lock_sha256"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/manifests/final_test_evaluator_authorization.json",
+      "purpose": "BASE TEST authorization",
+      "schema": "json-object",
+      "sha256": "5b5227a86a84aab679b262621d4ddfa4734a1167afcbc580e784861a2489a250"
+    },
+    {
+      "allowed_json_pointers": [
+        "/models",
+        "/comparison_metrics",
+        "/preferred_model"
+      ],
+      "checkpoint": "2.3D",
+      "json_pointers": [
+        "/models",
+        "/comparison_metrics",
+        "/preferred_model"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/manifests/selection_lock.json",
+      "purpose": "BASE model selection lock",
+      "schema": "json-object",
+      "sha256": "515df6a7b017853d3917dae276aa656b858587ba294ffdb28a001762ba6ceb5a"
+    },
+    {
+      "allowed_json_pointers": [
+        "/models",
+        "/preferred_model",
+        "/primary_metric"
+      ],
+      "checkpoint": "2.3D",
+      "json_pointers": [
+        "/models",
+        "/preferred_model",
+        "/primary_metric"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/reports/validation_comparison_S1_S2.json",
+      "purpose": "BASE development comparison",
+      "schema": "json-object",
+      "sha256": "e0b33e51ecb802b656bc6013ee5d4b72732efeddc396731f31faf6023000c05b"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.3E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/final_stage_2_3_manifest.json",
+      "purpose": "BASE TEST manifest",
+      "schema": "json-object",
+      "sha256": "867c1ce901983b3eedfc71b072eac1ab1f428dde8423f5af70812be7ac0bccc7"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics"
+      ],
+      "checkpoint": "2.3E",
+      "json_pointers": [
+        "/metrics"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+      "purpose": "BASE S1 TEST metrics",
+      "schema": "json-object",
+      "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics"
+      ],
+      "checkpoint": "2.3E",
+      "json_pointers": [
+        "/metrics"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+      "purpose": "BASE S2 TEST metrics",
+      "schema": "json-object",
+      "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "purpose": "Stage 2.4 parent manifest",
+      "schema": "json-object",
+      "sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c"
+    },
+    {
+      "allowed_json_pointers": [
+        "/fit_plan",
+        "/preprocessing_boundaries",
+        "/test_used"
+      ],
+      "checkpoint": "2.4A",
+      "json_pointers": [
+        "/fit_plan",
+        "/preprocessing_boundaries",
+        "/test_used"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/crossfit_contract.json",
+      "purpose": "cross-fit membership contract",
+      "schema": "json-object",
+      "sha256": "e6198a4d73d45e3a9356236242d9462770f782f9d343daedbaf0d0e06057e042"
+    },
+    {
+      "allowed_json_pointers": [
+        "/authorization_type",
+        "/human_authorized",
+        "/selection_lock_sha256"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/authorization_type",
+        "/human_authorized",
+        "/selection_lock_sha256"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/final_test_evaluator_authorization.json",
+      "purpose": "human TEST authorization",
+      "schema": "json-object",
+      "sha256": "bb0a3a4c5f514fe4de1bb4cf04fb564c5261be564d8eb49785e63d938dc45127"
+    },
+    {
+      "allowed_json_pointers": [
+        "/fit_dispositions",
+        "/required_row_coverage",
+        "/fallback_or_imputed_signals"
+      ],
+      "checkpoint": "2.4B",
+      "json_pointers": [
+        "/fit_dispositions",
+        "/required_row_coverage",
+        "/fallback_or_imputed_signals"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/fit_accounting_2_4B.json",
+      "purpose": "authoritative fit accounting repair",
+      "schema": "json-object",
+      "sha256": "23568b1c061c01c1880c913754ccc19e5c3a1d68fa77f404d02ba1dbb151cf2e"
+    },
+    {
+      "allowed_json_pointers": [
+        "/chain_preferred_model",
+        "/models",
+        "/crossfit"
+      ],
+      "checkpoint": "2.4D",
+      "json_pointers": [
+        "/chain_preferred_model",
+        "/models",
+        "/crossfit"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/selection_lock.json",
+      "purpose": "chain selection lock",
+      "schema": "json-object",
+      "sha256": "6ed67de1d3a16b5518f90c11befe1a9c77f9a43bdcf8c0402c8925f9cbebcdc7"
+    },
+    {
+      "allowed_json_pointers": [
+        "/U1",
+        "/U2",
+        "/same_group_fit_signal_overlap",
+        "/same_row_fit_signal_overlap"
+      ],
+      "checkpoint": "2.4B",
+      "json_pointers": [
+        "/U1",
+        "/U2",
+        "/same_group_fit_signal_overlap",
+        "/same_row_fit_signal_overlap"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/signal_coverage.json",
+      "purpose": "OOF signal coverage",
+      "schema": "json-object",
+      "sha256": "6102ff4af42e8df06142889029d2cd5c16ebfbabaa03548e5691bd6bb79f8926"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+      "purpose": "primary handoff",
+      "schema": "json-object",
+      "sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64"
+    },
+    {
+      "allowed_json_pointers": [
+        "/validation/VALIDATION_COMPARISON/comparison"
+      ],
+      "checkpoint": "2.4C",
+      "json_pointers": [
+        "/validation/VALIDATION_COMPARISON/comparison"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s1_development.json",
+      "purpose": "CHAIN-S1 development comparison",
+      "schema": "json-object",
+      "sha256": "f2dde13535e028823565780b254d9702b347eb307841f7abee4ac7365bf41a03"
+    },
+    {
+      "allowed_json_pointers": [
+        "/validation/VALIDATION_COMPARISON/comparison"
+      ],
+      "checkpoint": "2.4D",
+      "json_pointers": [
+        "/validation/VALIDATION_COMPARISON/comparison"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s2_development.json",
+      "purpose": "CHAIN-S2 development comparison",
+      "schema": "json-object",
+      "sha256": "dd511b5bb903de5536c8e2f3c43f8cad44b95194ad5623431875503c2d9e7f53"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4B",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/leakage_audit_2_4B.json",
+      "purpose": "signal leakage audit",
+      "schema": "json-object",
+      "sha256": "b5a39e56b082c8810ea27d0c473f73f3e8cd96455d3577f880f9451f8d144f48"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_confusion_matrix.json",
+      "purpose": "CHAIN-S1 TEST confusion matrix",
+      "schema": "json-object",
+      "sha256": "a85e0338fa0b11192b334842ea402346bf277a65ecc7523054e3c4d18cb7a7e9"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics",
+        "/baseline_average_precision"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/metrics",
+        "/baseline_average_precision"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+      "purpose": "CHAIN-S1 TEST metrics",
+      "schema": "json-object",
+      "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_confusion_matrix.json",
+      "purpose": "CHAIN-S2 TEST confusion matrix",
+      "schema": "json-object",
+      "sha256": "829b865da6d366eaf0748c69affc6a603577800dbcc222aca71a5072f92eaacf"
+    },
+    {
+      "allowed_json_pointers": [
+        "/metrics",
+        "/baseline_average_precision"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/metrics",
+        "/baseline_average_precision"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+      "purpose": "CHAIN-S2 TEST metrics",
+      "schema": "json-object",
+      "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_test_evaluation_provenance.json",
+      "purpose": "CHAIN TEST evaluation provenance",
+      "schema": "json-object",
+      "sha256": "01c249c42a896069f0d8a601f7f9c0821c3d36af5fc2f23745fb730186fbcfe2"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_test_sensitivity_analysis.json",
+      "purpose": "CHAIN TEST sensitivity analysis",
+      "schema": "json-object",
+      "sha256": "1a235513a879b65d8eecffba388c3202c68ac1405a3be808a2aa64b1302a809c"
+    },
+    {
+      "allowed_json_pointers": [
+        "/"
+      ],
+      "checkpoint": "2.4E",
+      "json_pointers": [
+        "/"
+      ],
+      "parent_manifest": "data/unsw_nb15/processed/stage_2_4/v1/manifest.json",
+      "parent_manifest_sha256": "dc85d21848b918f8a48ba596006e8faa23a799792521477e48c3c3826a03ee6c",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/final_stage_2_4_manifest.json",
+      "purpose": "locked chain TEST manifest",
+      "schema": "json-object",
+      "sha256": "d4b09666a5c8a63d7e4fcd8e6d0ee801e2dbd4a656671ac4ac421ec6ecda2242"
+    },
+    {
+      "allowed_json_pointers": [
+        "/files",
+        "/schema",
+        "/test_lock"
+      ],
+      "checkpoint": "2.1",
+      "json_pointers": [
+        "/files",
+        "/schema",
+        "/test_lock"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/unsw_nb15_acquisition_manifest.json",
+      "purpose": "UNSW acquisition provenance",
+      "schema": "json-object",
+      "sha256": "867ed2f8c83bba5caf4afa148ee421e5142a2d1de8da77e18d25e98cb6afd5ab"
+    },
+    {
+      "allowed_json_pointers": [
+        "/stage_2_1_closure",
+        "/test_lock",
+        "/dataset_separation"
+      ],
+      "checkpoint": "2.1",
+      "json_pointers": [
+        "/stage_2_1_closure",
+        "/test_lock",
+        "/dataset_separation"
+      ],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "data/unsw_nb15/processed/unsw_nb15_validation_summary.json",
+      "purpose": "UNSW validation summary",
+      "schema": "json-object",
+      "sha256": "d8e75198271001cb5952e15a0249f9a9c5ae2803a572669ab796d502d49727b7"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "2.1",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_1_labeling_ground_truth_evaluation_plan.md",
+      "purpose": "Stage 2.1 methodology finding",
+      "schema": "markdown",
+      "sha256": "0dcc029f1313066dc6fd65fedf0187676c09d86af5df115892155eea7f8bbb70"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "master",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_1_to_2_5_ml_pipeline_plan.md",
+      "purpose": "approved master pipeline",
+      "schema": "markdown",
+      "sha256": "5d388f62e1d1c2a22de2e4388aee80da427c975b42ed87f2bea7c6112f0719ba"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "2.2",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_2_unsupervised_model_comparison_plan.md",
+      "purpose": "Stage 2.2 plan",
+      "schema": "markdown",
+      "sha256": "3dd3fccb40f800600c79225e5c2815b88f26a76313fadc96f94cd37b34d64849"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "2.3",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_3_supervised_attack_classification_plan.md",
+      "purpose": "Stage 2.3 plan",
+      "schema": "markdown",
+      "sha256": "8f4d58146353b76fdca3279983c9258535b33ae8f6e87b39862eedae72a658c6"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "2.4",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_4_chained_ml_pipeline_plan.md",
+      "purpose": "Stage 2.4 plan",
+      "schema": "markdown",
+      "sha256": "0e56bb3ab24ef2d3a4ff7421fccb261db1846a38677178c6324323aeb181e76d"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "2.5",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "docs/plans/stage_2_5_final_evaluation_reporting_plan.md",
+      "purpose": "Stage 2.5 plan",
+      "schema": "markdown",
+      "sha256": "917d0be2fcb0fc71472e130a35244be804034710889734011cc150543aacd787"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "code",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "src/run_chained_test_evaluation.py",
+      "purpose": "Stage 2.4 TEST evaluator",
+      "schema": "python-source",
+      "sha256": "2d770fd6be5d1b2ac2b005e20a9d8d788097495d0860a7384f432f0ac3f8dc0d"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "code",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "src/run_supervised_test_evaluation.py",
+      "purpose": "Stage 2.3 TEST evaluator",
+      "schema": "python-source",
+      "sha256": "449974ff363bc72623325970795a93da23de516e203708cb6aa6f8b7c3871aef"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "code",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "src/run_unsw_test_evaluation.py",
+      "purpose": "Stage 2.2 TEST evaluator",
+      "schema": "python-source",
+      "sha256": "2439c01f2f96842bc12ef9eba004e3380d65fb28174ff1c427b16e63531f2096"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "code",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "src/supervised/evaluation.py",
+      "purpose": "Stage 2.3 metric implementation",
+      "schema": "python-source",
+      "sha256": "7d494cc1ee4fa4138da95f57d94e80487c1b97db6788b27734115fc305d2fca3"
+    },
+    {
+      "allowed_json_pointers": [],
+      "checkpoint": "code",
+      "json_pointers": [],
+      "parent_manifest": null,
+      "parent_manifest_sha256": null,
+      "path": "src/unsupervised/evaluation.py",
+      "purpose": "Stage 2.2 metric implementation",
+      "schema": "python-source",
+      "sha256": "64327e9f30c51993ed4fbd43bf18776f83a367325dcdd72120ec352bc75afc84"
+    }
+  ],
+  "primary_handoff": "data/unsw_nb15/processed/stage_2_4/v1/manifests/stage_2_5_handoff.json",
+  "primary_handoff_sha256": "059e930611897776bec00f892bd0c72dec40d0236a18b0de5ab1c6814601fc64",
+  "schema_version": "stage_2.5-source-inventory/1.0",
+  "source_policy": "JSON/plan/code provenance only; no raw CSV, row-level predictions, model loading, or TEST reread."
+}

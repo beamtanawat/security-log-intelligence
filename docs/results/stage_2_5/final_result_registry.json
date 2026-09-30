@@ -1,0 +1,2119 @@
+{
+  "branches": {
+    "BRANCH_A": {
+      "allowed_use": [
+        "anomaly scoring",
+        "prioritization",
+        "explainability",
+        "real-log case study"
+      ],
+      "chained_fortigate_supervised_training": "NO",
+      "dataset": "FortiGate real sanitized logs",
+      "role": "REAL-LOG UNSUPERVISED / ANOMALY ANALYSIS",
+      "supervised_fortigate_performance_claim": "NO"
+    },
+    "BRANCH_B": {
+      "dataset": "UNSW-NB15",
+      "role": "LABELED BENCHMARK FOR SUPERVISED AND CHAINED QUANTITATIVE EVALUATION",
+      "used_for": [
+        "U1/U2 benchmark evaluation",
+        "BASE S1/S2 evaluation",
+        "CHAIN-S1/S2 evaluation"
+      ]
+    }
+  },
+  "checkpoints": {
+    "2.1": {
+      "commit": "5d1de4a35e0535a68ed891a8ae4708e18a7095dd",
+      "status": "CLOSED"
+    },
+    "2.2": {
+      "commit": "aeb36ebb8c16fa6eed0b42960dd619b68a889f72",
+      "status": "CLOSED"
+    },
+    "2.3": {
+      "commit": "674f9035737f5e675797c911c6e92e1f4cdcabca",
+      "status": "CLOSED"
+    },
+    "2.4": {
+      "commit": "d011808855acdfe63fe18865b9e937ba3db3c801",
+      "status": "CLOSED"
+    }
+  },
+  "claim_limits": {
+    "anomaly_not_attack": true,
+    "anomaly_score_not_attack_probability": true,
+    "no_statistical_significance_claim": true,
+    "no_weak_labels_forced_into_supervised_evaluation": true,
+    "test_deltas_descriptive_only": true,
+    "unsw_metrics_do_not_establish_fortigate_production_performance": true
+  },
+  "comparisons": {
+    "development": {
+      "CHAIN-S1": {
+        "base_ap": 0.9939231496371828,
+        "chain_ap": 0.9941359114288555,
+        "delta_ap": 0.00021276179167273312,
+        "population": "VALIDATION_COMPARISON",
+        "provenance": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s1_development.json",
+          "sha256": "f2dde13535e028823565780b254d9702b347eb307841f7abee4ac7365bf41a03"
+        },
+        "result": "IMPROVEMENT",
+        "threshold": 0.5
+      },
+      "CHAIN-S2": {
+        "base_ap": 0.9968637967521546,
+        "chain_ap": 0.9968208117560664,
+        "delta_ap": -4.298499608823558e-05,
+        "population": "VALIDATION_COMPARISON",
+        "provenance": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s2_development.json",
+          "sha256": "dd511b5bb903de5536c8e2f3c43f8cad44b95194ad5623431875503c2d9e7f53"
+        },
+        "result": "DEGRADATION",
+        "threshold": 0.5
+      }
+    },
+    "locked_test": {
+      "CHAIN-S1": {
+        "ap_delta": 0.0009108507889732387,
+        "base_ap": 0.9650555012702602,
+        "chain_ap": 0.9659663520592334,
+        "evaluation_type": "LOCKED FIXED-DESIGN FINAL CHAINED EVALUATION",
+        "metrics": {
+          "accuracy": 0.8077418257785551,
+          "average_precision": 0.9659663520592334,
+          "confusion_matrix": {
+            "fn": 478,
+            "fp": 15351,
+            "tn": 21649,
+            "tp": 44854
+          },
+          "f1": 0.8500146867923098,
+          "precision": 0.7450211776430529,
+          "recall": 0.9894555722227124,
+          "roc_auc": 0.9544219583564859,
+          "row_count": 82332,
+          "threshold": 0.5,
+          "undefined_metric_reason": null
+        },
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "provenance": {
+          "json_pointer": "/metrics",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        }
+      },
+      "CHAIN-S2": {
+        "ap_delta": -0.00031530373781274434,
+        "base_ap": 0.9848644789351858,
+        "chain_ap": 0.9845491751973731,
+        "evaluation_type": "LOCKED FIXED-DESIGN FINAL CHAINED EVALUATION",
+        "metrics": {
+          "accuracy": 0.8290822523441675,
+          "average_precision": 0.9845491751973731,
+          "confusion_matrix": {
+            "fn": 419,
+            "fp": 13653,
+            "tn": 23347,
+            "tp": 44913
+          },
+          "f1": 0.8645594717896399,
+          "precision": 0.7668783936072123,
+          "recall": 0.9907570810906203,
+          "roc_auc": 0.9786226757066782,
+          "row_count": 82332,
+          "threshold": 0.5,
+          "undefined_metric_reason": null
+        },
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "provenance": {
+          "json_pointer": "/metrics",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        }
+      }
+    },
+    "test_delta_interpretation": "DESCRIPTIVE REPORTING ONLY",
+    "unsupervised_stage_2_2": {
+      "UNSW-U1": {
+        "provenance": [
+          {
+            "json_pointer": "/u1_ap",
+            "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_u2_comparison.json",
+            "sha256": "21ac797717e0dee21c7a1df7f7f73a66963fb31d004d84f40a69b2fbc7bb8fbc"
+          },
+          {
+            "json_pointer": "/metrics/pr_auc_ap",
+            "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+            "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+          }
+        ],
+        "test_pr_auc_ap": 0.4354768371146732,
+        "validation_comparison_pr_auc_ap": 0.6341041556993354
+      },
+      "UNSW-U2": {
+        "provenance": [
+          {
+            "json_pointer": "/u2_ap",
+            "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_u2_comparison.json",
+            "sha256": "21ac797717e0dee21c7a1df7f7f73a66963fb31d004d84f40a69b2fbc7bb8fbc"
+          },
+          {
+            "json_pointer": "/metrics/pr_auc_ap",
+            "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+            "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+          }
+        ],
+        "test_pr_auc_ap": 0.4556855668378132,
+        "validation_comparison_pr_auc_ap": 0.6911141511660387
+      }
+    }
+  },
+  "confusion_matrices": {
+    "BASE-S1": {
+      "axes": {
+        "predicted": [
+          "NORMAL",
+          "ATTACK"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          21912,
+          15088
+        ],
+        [
+          576,
+          44756
+        ]
+      ],
+      "model": "BASE-S1",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+        "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+      }
+    },
+    "BASE-S2": {
+      "axes": {
+        "predicted": [
+          "NORMAL",
+          "ATTACK"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          23767,
+          13233
+        ],
+        [
+          470,
+          44862
+        ]
+      ],
+      "model": "BASE-S2",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+        "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+      }
+    },
+    "CHAIN-S1": {
+      "axes": {
+        "predicted": [
+          "NORMAL",
+          "ATTACK"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          21649,
+          15351
+        ],
+        [
+          478,
+          44854
+        ]
+      ],
+      "model": "CHAIN-S1",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+        "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+      }
+    },
+    "CHAIN-S2": {
+      "axes": {
+        "predicted": [
+          "NORMAL",
+          "ATTACK"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          23347,
+          13653
+        ],
+        [
+          419,
+          44913
+        ]
+      ],
+      "model": "CHAIN-S2",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+        "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+      }
+    },
+    "UNSW-U1": {
+      "axes": {
+        "predicted": [
+          "INLIER",
+          "ANOMALY"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          0,
+          37000
+        ],
+        [
+          0,
+          45332
+        ]
+      ],
+      "model": "UNSW-U1",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+        "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+      }
+    },
+    "UNSW-U2": {
+      "axes": {
+        "predicted": [
+          "INLIER",
+          "ANOMALY"
+        ],
+        "true": [
+          "NORMAL",
+          "ATTACK"
+        ]
+      },
+      "branch": "BRANCH_B",
+      "dataset": "UNSW_NB15_BENCHMARK",
+      "matrix": [
+        [
+          2999,
+          34001
+        ],
+        [
+          17602,
+          27730
+        ]
+      ],
+      "model": "UNSW-U2",
+      "population": "OFFICIAL_TEST_ALL_ROWS",
+      "row_count": 82332,
+      "source": {
+        "json_pointer": "/metrics/confusion_matrix",
+        "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+        "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+      }
+    }
+  },
+  "datasets": {
+    "FORTIGATE_REAL_LOG": {
+      "branch": "BRANCH_A",
+      "identity": "FORTIGATE_REAL_LOG",
+      "raw_claim": "sanitized real logs; raw bytes remain local",
+      "supervised_performance_claim": false
+    },
+    "UNSW_NB15_BENCHMARK": {
+      "binary_mapping": {
+        "0": "NORMAL",
+        "1": "ATTACK"
+      },
+      "branch": "BRANCH_B",
+      "feature_contract": "UNSW_NB15 benchmark-specific; FortiGate 36-feature state not reused",
+      "identity": "UNSW_NB15_BENCHMARK",
+      "official_test_rows": 82332
+    }
+  },
+  "datasets_merged": false,
+  "generation": {
+    "checkpoint": "2.5A",
+    "generated_from": "FROZEN STAGE 2.1–2.4 ARTIFACTS",
+    "mode": "FROZEN_ARTIFACT_ADAPTER",
+    "no_model_retraining": true,
+    "no_official_test_rerun": true,
+    "no_prediction_regeneration": true
+  },
+  "governance": {
+    "authorization_sha256": "bb0a3a4c5f514fe4de1bb4cf04fb564c5261be564d8eb49785e63d938dc45127",
+    "chain_specific_tuning": "NONE",
+    "human_test_authorization_verified": true,
+    "model_selection_changed_after_test": false,
+    "no_post_test_tuning": true,
+    "prior_test_results_used_for_stage_2_4_development": false,
+    "prior_test_visibility_limitation": "The same official UNSW-NB15 TEST split was used in earlier fixed-stage evaluations; Stage 2.4E is not newly unseen at overall project level.",
+    "selection_lock_sha256": "6ed67de1d3a16b5518f90c11befe1a9c77f9a43bdcf8c0402c8925f9cbebcdc7",
+    "selection_lock_verified": true,
+    "test_contributed_fitted_state": "NONE",
+    "test_not_newly_unseen_at_overall_project_level": true
+  },
+  "leakage": {
+    "attack_cat_excluded": true,
+    "chained_signals_oof_cross_fitted": true,
+    "fit_accounting": {
+      "fallback_or_imputed_signals": 0,
+      "fresh_executed": 20,
+      "not_required_by_deduplication": 8,
+      "planned_fit_ids": 28,
+      "same_group_fit_signal_overlap": 0,
+      "same_row_fit_signal_overlap": 0,
+      "signal_coverage": "140273/140273",
+      "total_accounted": "28/28",
+      "unresolved": 0,
+      "validated_reused": 0
+    },
+    "fit_accounting_provenance": {
+      "json_pointer": "/",
+      "path": "data/unsw_nb15/processed/stage_2_4/v1/manifests/fit_accounting_2_4B.json",
+      "sha256": "23568b1c061c01c1880c913754ccc19e5c3a1d68fa77f404d02ba1dbb151cf2e"
+    },
+    "same_group_fit_signal_overlap": 0,
+    "same_row_fit_signal_overlap": 0,
+    "target_excluded_from_predictive_features": true
+  },
+  "methodology_finding": {
+    "source": {
+      "json_pointer": "/",
+      "path": "docs/plans/stage_2_1_labeling_ground_truth_evaluation_plan.md",
+      "sha256": "0dcc029f1313066dc6fd65fedf0187676c09d86af5df115892155eea7f8bbb70"
+    },
+    "statement": "FortiGate labeling feasibility was investigated; precision-first labeling did not produce sufficient defensible ATTACK/BENIGN coverage for primary supervised evaluation. FortiGate therefore remained the real-log anomaly branch and UNSW-NB15 became the labeled benchmark branch. Weak labels were not forced into supervised evaluation.",
+    "status": "PRECISION_FIRST_LABELING_NOT_SUFFICIENT_FOR_PRIMARY_SUPERVISED_EVALUATION"
+  },
+  "metrics": {
+    "records": [
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Stage 2.2 PR_AUC_AP",
+        "metric_source_key": "comparison.pr_auc_ap",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/pr_auc_ap",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.6341041556993354
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "comparison.roc_auc",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.18916624994768214
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "comparison.accuracy",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.7318158480232757
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "comparison.precision",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/precision",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.7318158480232757
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "comparison.recall",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/recall",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 1.0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "comparison.f1",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/f1",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.8451428006720032
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True positives",
+        "metric_source_key": "comparison.tp",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/tp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 12828
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False positives",
+        "metric_source_key": "comparison.fp",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/fp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 4701
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True negatives",
+        "metric_source_key": "comparison.tn",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/tn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False negatives",
+        "metric_source_key": "comparison.fn",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/fn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "comparison.row_count",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 17529
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u1_validation_metrics.json",
+          "sha256": "2728a9a9968244fd43bd26cb20e3d5d6cca44346dbd39dbfeb42a7ffec27c876"
+        },
+        "undefined_reason": null,
+        "value": 0.31137186228108904
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Stage 2.2 PR_AUC_AP",
+        "metric_source_key": "comparison.pr_auc_ap",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/pr_auc_ap",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.6911141511660387
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "comparison.roc_auc",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.3147394831437585
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "comparison.accuracy",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.3819955502310457
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "comparison.precision",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/precision",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.5989485170122012
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "comparison.recall",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/recall",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.4706891175553477
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "comparison.f1",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/f1",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.5271290759090314
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True positives",
+        "metric_source_key": "comparison.tp",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/tp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 6038
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False positives",
+        "metric_source_key": "comparison.fp",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/fp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 4043
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True negatives",
+        "metric_source_key": "comparison.tn",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/tn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 658
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False negatives",
+        "metric_source_key": "comparison.fn",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/fn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 6790
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "comparison.row_count",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/comparison/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 17529
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/validation/unsw_u2_validation_metrics.json",
+          "sha256": "051688b3ef301b6c006c8a8fcf01fd00adfd6e46ef353bf369081c418e735806"
+        },
+        "undefined_reason": null,
+        "value": 0.020132336051460697
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Stage 2.2 PR_AUC_AP",
+        "metric_source_key": "metrics.pr_auc_ap",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/pr_auc_ap",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.4354768371146732
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.25807613498966187
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.5506000097167566
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.5506000097167566
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 1.0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.710176713873919
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True positives",
+        "metric_source_key": "metrics.tp",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/tp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 45332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False positives",
+        "metric_source_key": "metrics.fp",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/fp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 37000
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True negatives",
+        "metric_source_key": "metrics.tn",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/tn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False negatives",
+        "metric_source_key": "metrics.fn",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/fn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "UNSW-U1-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u1_test_metrics.json",
+          "sha256": "ed4932d80701d25c726cd429da52309e0d3965e640e497e618b0ac2569779e66"
+        },
+        "undefined_reason": null,
+        "value": 0.31137186228108904
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Stage 2.2 PR_AUC_AP",
+        "metric_source_key": "metrics.pr_auc_ap",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/pr_auc_ap",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.4556855668378132
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.3236180247352267
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.37323276490307533
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.44920704346276585
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.6117091679167034
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.5180127588429243
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True positives",
+        "metric_source_key": "metrics.tp",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/tp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 27730
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False positives",
+        "metric_source_key": "metrics.fp",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/fp",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 34001
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "True negatives",
+        "metric_source_key": "metrics.tn",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/tn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 2999
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "False negatives",
+        "metric_source_key": "metrics.fn",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/fn",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 17602
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "UNSW-U2-BENCHMARK",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_2/v1/test_evaluation/unsw_u2_test_metrics.json",
+          "sha256": "e32b5d6d1e90af52d6bb09d1a5927a71903eaee3ccae370a9862427fc49da83f"
+        },
+        "undefined_reason": null,
+        "value": 0.020132336051460697
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "comparison.base_ap",
+        "model": "BASE-S1",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison/base_ap",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s1_development.json",
+          "sha256": "f2dde13535e028823565780b254d9702b347eb307841f7abee4ac7365bf41a03"
+        },
+        "undefined_reason": null,
+        "value": 0.9939231496371828
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "comparison.chain_ap",
+        "model": "CHAIN-S1",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison/chain_ap",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s1_development.json",
+          "sha256": "f2dde13535e028823565780b254d9702b347eb307841f7abee4ac7365bf41a03"
+        },
+        "undefined_reason": null,
+        "value": 0.9941359114288555
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "comparison.base_ap",
+        "model": "BASE-S2",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison/base_ap",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s2_development.json",
+          "sha256": "dd511b5bb903de5536c8e2f3c43f8cad44b95194ad5623431875503c2d9e7f53"
+        },
+        "undefined_reason": null,
+        "value": 0.9968637967521546
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "comparison.chain_ap",
+        "model": "CHAIN-S2",
+        "population": "VALIDATION_COMPARISON",
+        "row_count": 17529,
+        "source": {
+          "json_pointer": "/validation/VALIDATION_COMPARISON/comparison/chain_ap",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/reports/chain_s2_development.json",
+          "sha256": "dd511b5bb903de5536c8e2f3c43f8cad44b95194ad5623431875503c2d9e7f53"
+        },
+        "undefined_reason": null,
+        "value": 0.9968208117560664
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "metrics.average_precision",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/average_precision",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.9659663520592334
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.9544219583564859
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.8077418257785551
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.7450211776430529
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.9894555722227124
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.8500146867923098
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "CHAIN-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s1_test_metrics.json",
+          "sha256": "abc23ccdab50838dbdf537db3be99b5b4c590eb5fa1015d34349a592d02d4534"
+        },
+        "undefined_reason": null,
+        "value": 0.5
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "metrics.average_precision",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/average_precision",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.9845491751973731
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.9786226757066782
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.8290822523441675
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.7668783936072123
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.9907570810906203
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.8645594717896399
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "CHAIN-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_4/v1/test_evaluation/chained_s2_test_metrics.json",
+          "sha256": "ce29088e71b82ebd56cf8d6ae0d76f2a73047003d1e049d029410bd6b1b975c5"
+        },
+        "undefined_reason": null,
+        "value": 0.5
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "metrics.average_precision",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/average_precision",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.9650555012702602
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.952892474381202
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.8097459068163048
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.7478778156540338
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.9872937439336451
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.8510686848710732
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "BASE-S1",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s1_test_metrics.json",
+          "sha256": "6cb059bff15743e1611ce80a20590e1c87bbcbc5c389feaf2610d15ac5fe7918"
+        },
+        "undefined_reason": null,
+        "value": 0.5
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.average_precision_score",
+        "metric_display_name": "Average Precision (AP)",
+        "metric_source_key": "metrics.average_precision",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/average_precision",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.9848644789351858
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "sklearn.metrics.roc_auc_score",
+        "metric_display_name": "ROC-AUC",
+        "metric_source_key": "metrics.roc_auc",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/roc_auc",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.9790606653375338
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Accuracy",
+        "metric_source_key": "metrics.accuracy",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/accuracy",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.8335641063013166
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Precision",
+        "metric_source_key": "metrics.precision",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/precision",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.7722179189258972
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Recall",
+        "metric_source_key": "metrics.recall",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/recall",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.9896320480014118
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "F1",
+        "metric_source_key": "metrics.f1",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/f1",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.8675104179759637
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Row count",
+        "metric_source_key": "metrics.row_count",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/metrics/row_count",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 82332
+      },
+      {
+        "branch": "BRANCH_B",
+        "dataset": "UNSW_NB15_BENCHMARK",
+        "implementation": "source-artifact-value",
+        "metric_display_name": "Decision threshold",
+        "metric_source_key": "threshold.threshold",
+        "model": "BASE-S2",
+        "population": "OFFICIAL_TEST_ALL_ROWS",
+        "row_count": 82332,
+        "source": {
+          "json_pointer": "/threshold/threshold",
+          "path": "data/unsw_nb15/processed/stage_2_3/v1/test_evaluation/unsw_s2_test_metrics.json",
+          "sha256": "f11c302561b5d723ed935002cc388b741ba1f6fb7dc85f1083d51f8f8b67780d"
+        },
+        "undefined_reason": null,
+        "value": 0.5
+      }
+    ],
+    "roc_auc": {
+      "display_name": "ROC-AUC",
+      "implementation": "sklearn.metrics.roc_auc_score",
+      "source_key": "metrics.roc_auc"
+    },
+    "stage_2_2_unsupervised": {
+      "convention": "PR_AUC_AP",
+      "display_name": "Stage 2.2 PR_AUC_AP",
+      "implementation": "sklearn.metrics.average_precision_score",
+      "note": "Preserved source terminology; not silently renamed to Average Precision.",
+      "source_key": "metrics.pr_auc_ap"
+    },
+    "supervised_average_precision": {
+      "continuous_score": "p_attack",
+      "display_name": "Average Precision (AP)",
+      "implementation": "sklearn.metrics.average_precision_score",
+      "positive_class": "ATTACK = 1",
+      "source_key": "metrics.average_precision"
+    }
+  },
+  "models": {
+    "BASE-S1": {
+      "artifacts": {
+        "metadata": "11ab8701f62519e070549276a1de3157914bd3165199b6b7d4146965687dd924",
+        "model": "fc8f6bf60210b4dd499b09fc300487dcbe345b26d2d6ea983ee1862ac75e58d8",
+        "state": "1883e03e1b765c9153580e20ef66924a03ca2e70181d0b174c805d5fd26ec8b5"
+      },
+      "branch": "BRANCH_B",
+      "config": {
+        "C": 1.0,
+        "class_weight": null,
+        "dual": false,
+        "fit_intercept": true,
+        "intercept_scaling": 1,
+        "l1_ratio": 0.0,
+        "max_iter": 1000,
+        "n_jobs": null,
+        "penalty": "deprecated",
+        "random_state": 1729,
+        "solver": "lbfgs",
+        "tol": 0.0001,
+        "verbose": 0,
+        "warm_start": false
+      },
+      "family": "LOGISTIC_REGRESSION",
+      "role": "frozen supervised baseline",
+      "threshold": 0.5
+    },
+    "BASE-S2": {
+      "artifacts": {
+        "metadata": "cfe671ee69ebf5b65177657453cc78f6dc63fcdc3ef680a951e308922980ae4f",
+        "model": "e3e56eaf42331d708d458ab7b824d7df14e61e3c5329a04414e87e9bfcfa5b8d",
+        "state": "1883e03e1b765c9153580e20ef66924a03ca2e70181d0b174c805d5fd26ec8b5"
+      },
+      "branch": "BRANCH_B",
+      "config": {
+        "bootstrap": true,
+        "ccp_alpha": 0.0,
+        "class_weight": null,
+        "criterion": "gini",
+        "max_depth": 16,
+        "max_features": "sqrt",
+        "max_leaf_nodes": 1024,
+        "max_samples": null,
+        "min_impurity_decrease": 0.0,
+        "min_samples_leaf": 2,
+        "min_samples_split": 2,
+        "min_weight_fraction_leaf": 0.0,
+        "monotonic_cst": null,
+        "n_estimators": 150,
+        "n_jobs": 1,
+        "oob_score": false,
+        "random_state": 1729,
+        "verbose": 0,
+        "warm_start": false
+      },
+      "family": "RANDOM_FOREST",
+      "role": "frozen supervised baseline",
+      "threshold": 0.5
+    },
+    "CHAIN-S1": {
+      "artifacts": {
+        "metadata": "00ad54ef95beb249509337a744d7d1447bd54cbbbec5bbb33ef780dcfcaf9125",
+        "model": "c6804fd84dd37194516b0172c80fb5cea026535912c95547ed0b9b6cd44e3407"
+      },
+      "branch": "BRANCH_B",
+      "config": {
+        "C": 1.0
+      },
+      "family": "LOGISTIC_REGRESSION",
+      "source_features": "28 BASE + U1 + U2",
+      "threshold": 0.5,
+      "training_signal_policy": "OOF / CROSS-FITTED"
+    },
+    "CHAIN-S2": {
+      "artifacts": {
+        "metadata": "705deaceb0e8ab067bae35671aada17591b7a89ae59f4dfc27b300c568d4b4ea",
+        "model": "2c63616e07de846f1b78f8fdc98a57af51ea31483e2d8ca46d2e16ade3cbcd39"
+      },
+      "branch": "BRANCH_B",
+      "config": {
+        "bootstrap": true,
+        "ccp_alpha": 0.0,
+        "class_weight": null,
+        "criterion": "gini",
+        "max_depth": 16,
+        "max_features": "sqrt",
+        "max_leaf_nodes": 1024,
+        "max_samples": null,
+        "min_impurity_decrease": 0.0,
+        "min_samples_leaf": 2,
+        "min_samples_split": 2,
+        "min_weight_fraction_leaf": 0.0,
+        "monotonic_cst": null,
+        "n_estimators": 150,
+        "n_jobs": 1,
+        "oob_score": false,
+        "random_state": 1729,
+        "verbose": 0,
+        "warm_start": false
+      },
+      "config_source": "frozen Stage 2.3 S2_CONFIG",
+      "family": "RANDOM_FOREST",
+      "source_features": "28 BASE + U1 + U2",
+      "threshold": 0.5,
+      "training_signal_policy": "OOF / CROSS-FITTED"
+    },
+    "FORTIGATE-U1": {
+      "branch": "BRANCH_A",
+      "family": "ISOLATION_FOREST",
+      "fit_split": "REFERENCE",
+      "role": "real-log anomaly scoring",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    },
+    "FORTIGATE-U2": {
+      "branch": "BRANCH_A",
+      "config": {
+        "batch_size": 1024,
+        "compute_labels": false,
+        "init": "k-means++",
+        "init_size": 3072,
+        "max_iter": 100,
+        "max_no_improvement": 10,
+        "n_clusters": 32,
+        "n_init": 3,
+        "random_state": 1729,
+        "reassignment_ratio": 0.01,
+        "score_batch_size": 4096,
+        "tol": 0.0
+      },
+      "family": "MINIBATCHKMEANS_DISTANCE_SCORER",
+      "fit_split": "REFERENCE",
+      "role": "real-log anomaly scoring",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    },
+    "U1": {
+      "artifact_identity": "99f4b9ca027a950b77b990bd8c2e808f87dc8010bdcf7c3e9df7609473734e42",
+      "branch": "BRANCH_B",
+      "config": {
+        "bootstrap": false,
+        "contamination": "auto",
+        "max_features": 1.0,
+        "max_samples": 4096,
+        "n_estimators": 200,
+        "n_jobs": 1,
+        "random_state": 1729,
+        "warm_start": false
+      },
+      "family": "ISOLATION_FOREST",
+      "model_artifact_sha256": "cef2039b630def37ce8a18178656965aece0de525250b51858f1081a35814982",
+      "model_version": "stage_2.4b-u1/1.0",
+      "preprocessing_state_sha256": "1883e03e1b765c9153580e20ef66924a03ca2e70181d0b174c805d5fd26ec8b5",
+      "role": "Stage 2.4 chain inference U1",
+      "score_direction": "HIGHER = MORE ANOMALOUS",
+      "signal": "negative score_samples"
+    },
+    "U2": {
+      "artifact_identity": "e3a1f8edfb6b925bfb4ab378f46ed2407b92d16bdb1b7909a098407b899b101f",
+      "branch": "BRANCH_B",
+      "config": {
+        "batch_size": 1024,
+        "compute_labels": false,
+        "init": "k-means++",
+        "init_size": 3072,
+        "max_iter": 100,
+        "max_no_improvement": 10,
+        "n_clusters": 32,
+        "n_init": 3,
+        "random_state": 1729,
+        "reassignment_ratio": 0.01,
+        "score_batch_size": 4096,
+        "tol": 0.0
+      },
+      "family": "MINIBATCHKMEANS_DISTANCE_SCORER",
+      "model_artifact_sha256": "03f7df6a90cc9da8e1bc89cd7b0ded8876cd89c223e7584a9f1ec3430f1686e4",
+      "model_version": "stage_2.4b-u2/1.0",
+      "preprocessing_state_sha256": "1883e03e1b765c9153580e20ef66924a03ca2e70181d0b174c805d5fd26ec8b5",
+      "role": "Stage 2.4 chain inference U2",
+      "score_direction": "HIGHER = MORE ANOMALOUS",
+      "signal": "nearest-centroid squared distance"
+    },
+    "UNSW-U1-BENCHMARK": {
+      "branch": "BRANCH_B",
+      "config": {
+        "bootstrap": false,
+        "contamination": "auto",
+        "max_features": 1.0,
+        "max_samples": 4096,
+        "n_estimators": 200,
+        "n_jobs": 1,
+        "random_state": 1729,
+        "warm_start": false
+      },
+      "family": "ISOLATION_FOREST",
+      "fit_boundary": "TRAIN_INTERNAL_ONLY",
+      "model_sha256": "8819559cec693bb23cc0d76acb8f205b62fe0c6c5213ac2a3c19f40eb70d8868",
+      "role": "Stage 2.2 benchmark unsupervised U1",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    },
+    "UNSW-U2-BENCHMARK": {
+      "branch": "BRANCH_B",
+      "config": {
+        "batch_size": 1024,
+        "compute_labels": false,
+        "init": "k-means++",
+        "init_size": 3072,
+        "max_iter": 100,
+        "max_no_improvement": 10,
+        "n_clusters": 32,
+        "n_init": 3,
+        "random_state": 1729,
+        "reassignment_ratio": 0.01,
+        "score_batch_size": 4096,
+        "tol": 0.0
+      },
+      "family": "MINIBATCHKMEANS_DISTANCE_SCORER",
+      "fit_boundary": "TRAIN_INTERNAL_ONLY",
+      "model_sha256": "fe9ed81c2bfd96edc20cf20d0456ba3de2ec4a67f78598ad5e57e0138d273be3",
+      "role": "Stage 2.2 benchmark unsupervised U2",
+      "score_direction": "HIGHER_MORE_ANOMALOUS"
+    }
+  },
+  "registry_version": "2.5A",
+  "schema_version": "stage_2.5-results/1.0",
+  "source_inventory_sha256": "d11d8c611d6ad7fd2f5a3513d72c174a270ddb9712eb00490ef8ab0794c6d052"
+}
